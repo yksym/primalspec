@@ -27,14 +27,9 @@ data SomeSuchThat = forall s. SuchThat s => SomeSuchThat s
 instance SuchThat SomeSuchThat where
     suchThat (SomeSuchThat s) = suchThat s
 
-data UndefinedSuchThatImpl = UndefinedSuchThatImpl
-
 --data IORefSuchThatImpl = IORefSuchThatImpl (IORef String)
 
 data StdInSuchThatImpl = StdInSuchThatImpl
-
-instance SuchThat UndefinedSuchThatImpl where
-  suchThat _ = undefined
 
 instance SuchThat StdInSuchThatImpl where
   suchThat _ q p = unsafePerformIO $ askStdIn q p

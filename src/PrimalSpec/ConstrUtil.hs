@@ -1,4 +1,5 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TupleSections #-}
 
 module PrimalSpec.ConstrUtil
 ( argOf
@@ -20,7 +21,7 @@ constrNameOf = constrName . dummy
 
 arg1 :: forall a t. Data t => t -> a
 arg1 x = result where
-    (result, _, _)   = gfoldl go (\c -> (undefined, 0, c)) x
+    (result, _, _)   = gfoldl go (undefined, 0::Int,) x
     go (_, 0, c) f   = (unsafeCoerce f, 1, c f)
     go (res, i, c) f = (res, i + 1, c f)
 

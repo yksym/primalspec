@@ -23,12 +23,12 @@ data SomeNDC = forall s. NDC s => SomeNDC s
 instance NDC SomeNDC where
     _readNDC (SomeNDC s) = _readNDC s
 
-data ConstNDCImpl = ConstNDCImpl Int
+newtype ConstNDCImpl = ConstNDCImpl Int
 
 data StdInNDCImpl = StdInNDCImpl
 
 -- 評価タイミングや評価回数のことを考えると使うの難しい・・・
-data IORefNDDecImpl = IORefNDDecImpl (IORef Int)
+newtype IORefNDDecImpl = IORefNDDecImpl (IORef Int)
 
 instance NDC ConstNDCImpl where
   _readNDC (ConstNDCImpl n) _ = n
@@ -50,13 +50,13 @@ useNDC = give . SomeNDC
 readNDC :: UseNDC => String -> Int
 readNDC = _readNDC (given :: SomeNDC)
 
-useIntIORef :: IORef a -> (Given (IORef a) => r) -> r
-useIntIORef = give
+--useIntIORef :: IORef a -> (Given (IORef a) => r) -> r
+--useIntIORef = give
 
-type UseIntIORef = Given (IORef Int)
-
-setIORefNDDec :: UseIntIORef => Int -> a -> a
-setIORefNDDec  n a = unsafePerformIO $ do
-    writeIORef given n
-    return a
+--type UseIntIORef = Given (IORef Int)
+--
+--setIORefNDDec :: UseIntIORef => Int -> a -> a
+--setIORefNDDec  n a = unsafePerformIO $ do
+--    writeIORef given n
+--    return a
 

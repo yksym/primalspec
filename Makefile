@@ -1,6 +1,6 @@
 
 all:
-	stack build
+	stack build --pedantic
 
 run:
 	stack exec primalspec-exe
@@ -10,5 +10,8 @@ test:
 
 doc:
 	stack haddock
+
+hlint:
+	hlint .
 
 .PHONY: all run test example doc
