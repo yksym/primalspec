@@ -7,7 +7,6 @@ module Main where
 
 import PrimalSpec.ProcExp
 import PrimalSpec.SuchThat
-import PrimalSpec.NonDeterministicCounter
 import Control.Lens
 import Data.Data (Data)
 import Text.Printf (printf)
@@ -21,6 +20,7 @@ data VMState = VMState {
 data VMEvent
     = Coin
     | Juice
+    | Bingo
     | Fill Int
     deriving (Data, Eq, Ord, Read, Show)
 
@@ -52,14 +52,14 @@ vm s = printf "vmloop: %s" (show s) *!* if
     Coin --> Juice --> vm (s &~ do { vmCoin += 1; juice -= 1; })
     |=| Fill ?-> \n -> vm (s &~ do { vmCoin .= complexCalc s; juice += n; })
   | s ^. juice >  1 ->
-    Coin --> Juice --> (vm (s &~ do { vmCoin += 1; juice -= 1; }) |~| Juice --> vm (s &~ do { vmCoin += 1; juice -= 2; }))
+    Coin --> Juice --> (vm (s &~ do { vmCoin += 1; juice -= 1; }) |=| Bingo --> Juice --> vm (s &~ do { vmCoin += 1; juice -= 2; }))
     |=| Fill ?-> \n -> vm (s &~ do { vmCoin .= complexCalc s; juice += n; })
 
 test :: Process
 test = Coin --> Juice --> Coin --> Juice --> Fill 1 --> Coin --> Juice --> Skip
 
 main :: IO ()
-main = useSuchThat StdInSuchThatImpl $ useNDC StdInNDCImpl
+main = useSuchThat StdInSuchThatImpl $
         --repl $ entry <||> test
         repl entry
 
