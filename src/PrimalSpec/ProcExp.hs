@@ -3,8 +3,18 @@
 {-# LANGUAGE ConstraintKinds #-}
 
 module PrimalSpec.ProcExp
-(module PrimalSpec.ProcExp)
-where
+( ProcExp(Stop, Skip)
+, (-->)
+, (?->)
+, (&->)
+, (*!*)
+, (|=|)
+, (PrimalSpec.ProcExp.<|>)
+, (<||>)
+, (>>>)
+, repl
+, Data
+) where
 
 import PrimalSpec.Util
 import PrimalSpec.ConstrUtil

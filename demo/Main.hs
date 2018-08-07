@@ -5,10 +5,8 @@
 
 module Main where
 
-import PrimalSpec.ProcExp
-import PrimalSpec.SuchThat
+import PrimalSpec
 import Control.Lens
-import Data.Data (Data)
 import Text.Printf (printf)
 
 
