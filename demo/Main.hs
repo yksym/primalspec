@@ -60,6 +60,6 @@ test = Coin --> Juice --> Coin --> Juice --> Fill 1 --> Coin --> Juice --> Skip
 
 main :: IO ()
 main = useSuchThat StdInSuchThatImpl $
-        --repl $ entry <||> test
-        repl entry
+        repl $ entry <||> test
+        --repl entry
 
