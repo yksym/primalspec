@@ -7,12 +7,14 @@ module PrimalSpec.ProcExp
 , (-->)
 , (?->)
 , (&->)
+, (&!->)
 , (*!*)
 , (|=|)
 , (PrimalSpec.ProcExp.<|>)
 , (<||>)
 , (>>>)
 , repl
+, autoStep
 , Data
 ) where
 
@@ -69,7 +71,10 @@ b &-> p = if b then p else Stop
 (*!*) :: String -> ProcExp ev -> ProcExp ev
 (*!*) =  DebugShow
 
-infixr 4  -->, ?->, &->, *!* -- , *?*, *%*
+(&!->) :: Bool -> ProcExp ev -> ProcExp ev
+b &!-> p =  if b then p else "assert failed" *!* Stop
+
+infixr 4  -->, ?->, &->, &!->, *!* --, *%*
 
 (|=|) :: ProcExp ev -> ProcExp ev -> ProcExp ev
 (|=|) = ExternalChoise
@@ -181,3 +186,22 @@ repl p0 = do
             ev <- if Prelude.null evs then askEv p else askEvByIdx evs p
             go $ simp $ fromJust $ tryStep p ev
 
+-- 1通りのトレースしか起き得ない場合、それを辿る
+autoStep :: (Data ev, Eq ev, Ord ev, Read ev, Show ev) => ProcExp ev -> Maybe ([ev], ProcExp ev)
+autoStep p0 = go [] $ simp p0
+    where
+        go trs p | isFinished p = Just (trs, p)
+                 | otherwise   = do
+                let evs = [ev | ev <- S.toList $ candidates p, isJust $ tryStep p ev]
+                case evs of
+                    [ev] -> go (trs++[ev]) $ simp $ fromJust $ tryStep p ev
+                    _    -> Nothing
+        isFinished Skip               = True
+        isFinished (Parallel Skip _)  = True
+        isFinished (Parallel _ Skip)  = True
+        isFinished (Parallel p1 p2)   = isFinished p1 || isFinished p2
+        isFinished _                  = False
+
+
+--(|<=) :: (Data ev, Eq ev, Ord ev, Read ev, Show ev) => ProcExp ev -> ProcExp ev -> Bool
+--p0 |<= p1 

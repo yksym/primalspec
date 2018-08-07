@@ -57,7 +57,7 @@ test :: Process
 test = Coin --> Juice --> Coin --> Juice --> Fill 1 --> Coin --> Juice --> Skip
 
 main :: IO ()
-main = useSuchThat StdInSuchThatImpl $
-        repl $ entry <||> test
-        --repl entry
+main = useSuchThat StdInSuchThatImpl $ repl $ entry
+--main = useSuchThat StdInSuchThatImpl $ repl $ entry <||> test
+--main = useSuchThat StdInSuchThatImpl <$> (print $ autoStep $ entry <||> test)
 
