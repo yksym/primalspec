@@ -13,22 +13,19 @@ module PrimalSpec.ProcExp
 , (PrimalSpec.ProcExp.<|>)
 , (<||>)
 , (>>>)
-, repl
-, autoStep
+, skipExists
+, candidates
+, simp
+, tryStep
 , Data
 ) where
 
-import PrimalSpec.Util
 import PrimalSpec.ConstrUtil
-import Text.Printf (printf)
 import Control.Applicative as A
 import Data.Data (Data)
 import Data.Monoid ((<>))
-import Data.Maybe (isJust, fromJust)
 import Data.Set as S
-import Data.List (transpose)
-import System.IO (hSetBuffering, stdout, BufferMode(..))
-import Debug.Trace (trace)
+import Data.Maybe (isJust)
 
 
 data ProcExp ev
@@ -52,7 +49,7 @@ instance forall ev. (Show ev, Data ev) => Show (ProcExp ev) where
         go depth pre (ExternalChoise p1 p2) = indent depth <> pre <> "|=|" <> endl <> mconcat [go (depth+1) "" p | p <- [p1, p2]]
         go depth pre (Interrupt p1 p2)      = indent depth <> pre <> "<|>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
         go depth pre (Sequential p1 p2)     = indent depth <> pre <> " ; " <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
-        go depth pre (Parallel p1 p2) = indent depth <> pre <> "<||>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
+        go depth pre (Parallel p1 p2)       = indent depth <> pre <> "<||>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
         go depth pre (DebugShow _ p)        = go depth pre p
         indent n = replicate (2*n) ' '
         endl = "\n"
@@ -94,9 +91,6 @@ infixr 4  -->, ?->, &->, &!->, *!* --, *%*
 infixl 3 >>>,  |=|, <|>, <||>
 
 
-dbg :: (Show s) => s -> a -> a
-dbg s = trace $ printf "\ndbg---------\n%s\n------------\n" $ show s
-
 -- ✓ がないので意味論変えてる
 simp :: (Show ev, Data ev) => ProcExp ev -> ProcExp ev
 simp (Interrupt Skip _)              = Skip
@@ -111,7 +105,7 @@ simp (ExternalChoise Stop p2)       = simp p2
 simp (ExternalChoise p1 p2)         = ExternalChoise (simp p1) (simp p2)
 simp (Parallel Skip Skip)           = Skip
 simp (Parallel p1 p2)               = Parallel (simp p1) (simp p2)
-simp (DebugShow s p)                = dbg s $ simp p
+simp (DebugShow _ p)                = simp p
 simp p = p
 
 
@@ -153,55 +147,12 @@ candidates (Interrupt p1 p2) = candidates p1 `S.union` candidates p2
 candidates (Parallel p1 p2) = candidates p1 `S.union` candidates p2
 candidates _ = S.empty
 
-
-interleave :: [a] -> [a] -> [a]
-interleave xs ys = concat $ transpose [xs, ys]
-
-
-askEv :: (Data ev, Eq ev, Read ev, Show ev) => ProcExp ev -> IO ev
-askEv p = askStdIn "input acceptable event" (isJust . tryStep p)
-
-
-askEvByIdx :: (Data ev, Eq ev, Read ev, Show ev) => [ev] -> ProcExp ev -> IO ev
-askEvByIdx evs p = do
-    printEvents
-    idx <- askStdIn ("input [1-" <> show (length evs) <> "]. 0 : perform another event.") (<= length evs)
-    if
-        | idx > 0 -> return $ evs !! (idx-1)
-        | otherwise -> askEv p
-    where
-        printIndeces = putStr <$> [show n <> " : " | n <- [1..(length evs)]]
-        printEvs     = print <$> evs
-        printEvents  = sequence_ $ interleave printIndeces printEvs
-
-
-repl :: (Data ev, Eq ev, Ord ev, Read ev, Show ev) => ProcExp ev -> IO ()
-repl p0 = do
-    hSetBuffering stdout NoBuffering
-    go $ simp p0
-    where
-        go p = do
-            let evs = [ev | ev <- S.toList $ candidates p, isJust $ tryStep p ev]
-            print p
-            ev <- if Prelude.null evs then askEv p else askEvByIdx evs p
-            go $ simp $ fromJust $ tryStep p ev
-
--- 1通りのトレースしか起き得ない場合、それを辿る
-autoStep :: (Data ev, Eq ev, Ord ev, Read ev, Show ev) => ProcExp ev -> Maybe ([ev], ProcExp ev)
-autoStep p0 = go [] $ simp p0
-    where
-        go trs p | isFinished p = Just (trs, p)
-                 | otherwise   = do
-                let evs = [ev | ev <- S.toList $ candidates p, isJust $ tryStep p ev]
-                case evs of
-                    [ev] -> go (trs++[ev]) $ simp $ fromJust $ tryStep p ev
-                    _    -> Nothing
-        isFinished Skip               = True
-        isFinished (Parallel Skip _)  = True
-        isFinished (Parallel _ Skip)  = True
-        isFinished (Parallel p1 p2)   = isFinished p1 || isFinished p2
-        isFinished _                  = False
-
+skipExists :: ProcExp ev -> Bool
+skipExists Skip               = True
+skipExists (Parallel Skip _)  = True
+skipExists (Parallel _ Skip)  = True
+skipExists (Parallel p1 p2)   = skipExists p1 || skipExists p2
+skipExists _                  = False
 
 --(|<=) :: (Data ev, Eq ev, Ord ev, Read ev, Show ev) => ProcExp ev -> ProcExp ev -> Bool
 --p0 |<= p1 

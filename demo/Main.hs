@@ -58,5 +58,7 @@ test = Coin --> Juice --> Coin --> Juice --> Fill 1 --> Coin --> Juice --> Skip
 main :: IO ()
 --main = useSuchThat StdInSuchThatImpl $ repl entry
 --main = useSuchThat StdInSuchThatImpl $ repl $ entry <||> test
-main = print $ useSuchThat StdInSuchThatImpl $ autoStep $ entry <||> test
+main = do
+    _ <- useSuchThat StdInSuchThatImpl $ autoStep print $ entry <||> test
+    return ()
 
