@@ -1,12 +1,10 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 
 module Main where
 
 import PrimalSpec
 import Control.Lens
+import Data.IORef
 
 
 data VMState = VMState {
@@ -32,33 +30,31 @@ entry = vm VMState {
 }
 
 
-complexCalc :: UseSuchThat => VMState -> Int
-complexCalc s = s_t_ "what is n?" (\n -> (n + (s ^. vmCoin)) `mod` 4 == 1)
-
+complexCalc :: UseSuchThat => Int -> Int
+complexCalc n = s_t_ "what is n?" $ \n' -> n' == (n + 1)
 
 
 vm :: UseSuchThat => VMState -> Process
-vm s = "vm" *!* if
-  | s ^. juice == 0   -> Fill ?-> \n -> vm (s &~ do { vmCoin .= complexCalc s; juice += n; })
+vm s = s *?* if
+  | s ^. juice == 0   -> Fill ?-> \n -> vm (s &~ do { vmCoin .= complexCalc 1 ; juice += n; })
 
   | s ^. juice == 1   -> Coin --> Juice --> vm (s &~ do { vmCoin += 1; juice -= 1; })
-                         |=| Fill ?-> \n -> vm (s &~ do { vmCoin .= complexCalc s; juice += n; })
+                         |=| Fill ?-> \n -> vm (s &~ do { vmCoin .= complexCalc 3; juice += n; })
 
   | s ^. juice >  1   -> Coin --> Juice -->
                                (   vm (s &~ do { vmCoin += 1; juice -= 1; })
                                    |=| Bingo --> Juice --> vm (s &~ do { vmCoin += 1; juice -= 2; })
                                )
-                         |=| Fill ?-> \n -> vm (s &~ do { vmCoin .= complexCalc s; juice += n; })
+                         |=| Fill ?-> \n -> vm (s &~ do { vmCoin .= complexCalc 10; juice += n; })
 
   | otherwise         -> Stop
 
-test :: Process
-test = Coin --> Juice --> Coin --> Juice --> Fill 1 --> Coin --> Juice --> Skip
+test :: UseSuchThat => Process
+test = Coin --> Juice --> Coin --> Juice --> (2::Int) *!* Fill 1 --> Coin --> Juice --> Skip
 
 main :: IO ()
---main = useSuchThat StdInSuchThatImpl $ repl entry
-main = useSuchThat StdInSuchThatImpl $ repl $ entry <||> test
---main = do
---    _ <- useSuchThat StdInSuchThatImpl $ autoStep print $ entry <||> test
---    return ()
+--main = useStdInSuchThatImpl $ repl $ entry <||> test
+main = do
+    ref <- newIORef ""
+    useIORefSuchThat ref $ void $ autoStep $ entry <||> test
 

@@ -24,6 +24,17 @@ dependencies:
 - reflection
 - containers
 
+default-extensions:
+  - GADTs
+  - FlexibleContexts
+  - ConstraintKinds
+  - ExistentialQuantification
+  - MultiWayIf
+  - TupleSections
+  - RankNTypes
+  - TemplateHaskell
+
+
 library:
   source-dirs: src
 

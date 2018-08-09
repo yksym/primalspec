@@ -1,17 +1,14 @@
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE RankNTypes #-}
-
 module PrimalSpec.SuchThat
 ( SomeSuchThat
 , StdInSuchThatImpl(..)
 --, IORefSuchThatImpl(..)
 , UseSuchThat
 , useSuchThat
+, useStdInSuchThat
+, useIORefSuchThat
 , s_t_
---, s_t_solve
---, (|?|)
+, hint_s_t_
+, (*!*)
 ) where
 
 import Data.Reflection (Given, give, given)
@@ -44,12 +41,24 @@ instance SuchThat IORefSuchThatImpl where
    writeIORef ref (show q)
    return p
 
-
 type UseSuchThat = Given SomeSuchThat
 
 s_t_ :: (UseSuchThat, Read a) => String -> (a -> Bool) -> a
 s_t_ = suchThat (given :: SomeSuchThat)
 
+hint_s_t_ :: (UseSuchThat, Show a) => a -> b -> b
+hint_s_t_ = hintSuchThat (given :: SomeSuchThat)
+
 useSuchThat :: SuchThat s => s -> (Given SomeSuchThat => r) -> r
 useSuchThat = give . SomeSuchThat
 
+useStdInSuchThat :: (Given SomeSuchThat => r) -> r
+useStdInSuchThat = useSuchThat StdInSuchThatImpl
+
+useIORefSuchThat :: IORef String -> (Given SomeSuchThat => r) -> r
+useIORefSuchThat ref = useSuchThat (IORefSuchThatImpl ref)
+
+(*!*) :: (UseSuchThat, Show a) => a -> b -> b
+(*!*) =  hint_s_t_
+
+infixr 4 *!*

@@ -1,14 +1,10 @@
-{-# LANGUAGE GADTs, ExistentialQuantification, MultiWayIf #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ConstraintKinds #-}
-
 module PrimalSpec.ProcExp
 ( ProcExp(Stop, Skip)
 , (-->)
 , (?->)
 , (&->)
 , (&!->)
-, (*!*)
+, (*?*)
 , (|=|)
 , (PrimalSpec.ProcExp.<|>)
 , (<||>)
@@ -28,6 +24,7 @@ import Data.Data (Data)
 import Data.Monoid ((<>))
 import Data.Set as S
 import Data.Maybe (isJust)
+import Text.Printf (printf)
 
 
 data ProcExp ev
@@ -39,8 +36,7 @@ data ProcExp ev
     | Interrupt (ProcExp ev) (ProcExp ev)
     | Sequential (ProcExp ev) (ProcExp ev)
     | Parallel (ProcExp ev) (ProcExp ev)
-    | DebugShow String (ProcExp ev)
-    -- | HintSuchThat String (ProcExp ev)
+    | forall a. (Show a) => DebugShow a (ProcExp ev)
 
 instance forall ev. (Show ev, Data ev) => Show (ProcExp ev) where
     show = go 0 "" where
@@ -52,7 +48,9 @@ instance forall ev. (Show ev, Data ev) => Show (ProcExp ev) where
         go depth pre (Interrupt p1 p2)      = indent depth <> pre <> "<|>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
         go depth pre (Sequential p1 p2)     = indent depth <> pre <> " ; " <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
         go depth pre (Parallel p1 p2)       = indent depth <> pre <> "<||>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
-        go depth pre (DebugShow _ p)        = go depth pre p
+        go depth pre (DebugShow s p)        = indent depth <> pre <> s' <> endl <> go depth pre p
+            where
+            s' = printf "--dbg: %s\n" $ show s
         indent n = replicate (2*n) ' '
         endl = "\n"
 
@@ -67,19 +65,16 @@ instance forall ev. (Show ev, Data ev) => Show (ProcExp ev) where
 (&->) :: Bool -> ProcExp ev -> ProcExp ev
 b &-> p = if b then p else Stop
 
-(*!*) :: String -> ProcExp ev -> ProcExp ev
-(*!*) =  DebugShow
+(*?*) :: (Show a) => a -> ProcExp ev -> ProcExp ev
+(*?*) =  DebugShow
 
 (&!->) :: Bool -> ProcExp ev -> ProcExp ev
-b &!-> p =  if b then p else "assert failed" *!* Stop
+b &!-> p =  if b then p else "assert failed" *?* Stop
 
-infixr 4  -->, ?->, &->, &!->, *!* --, *%*
+infixr 4  -->, ?->, &->, &!->, *?*
 
 (|=|) :: ProcExp ev -> ProcExp ev -> ProcExp ev
 (|=|) = ExternalChoise
-
--- (|~|) :: ProcExp ev -> ProcExp ev -> ProcExp ev
--- (|~|) = InternalChoise
 
 (<|>) :: ProcExp ev -> ProcExp ev -> ProcExp ev
 (<|>) = Interrupt
@@ -92,7 +87,6 @@ infixr 4  -->, ?->, &->, &!->, *!* --, *%*
 
 infixl 3 >>>,  |=|, <|>, <||>
 
--- ✓ がないので意味論変えてる
 simp :: (Show ev, Data ev) => ProcExp ev -> ProcExp ev
 simp (Interrupt Skip _)              = Skip
 simp (Interrupt Stop _)              = Stop
@@ -110,7 +104,7 @@ simp (DebugShow s p)                = DebugShow s $ simp p
 simp p = p
 
 
-tryStep :: (UseDebugShow, Data ev, Eq ev, Show ev) => ProcExp ev -> ev -> Maybe (ProcExp ev)
+tryStep :: (Data ev, Eq ev, Show ev) => ProcExp ev -> ev -> Maybe (ProcExp ev)
 tryStep Skip _ = Nothing
 tryStep Stop _ = Nothing
 tryStep (Prefix ev1 p) ev2 | ev1 == ev2 = Just p
@@ -137,7 +131,7 @@ tryStep (Parallel p1 p2) ev = Parallel <$> p1' <*> p2'
     where
         p1'  = tryStep p1 ev
         p2'  = tryStep p2 ev
-tryStep (DebugShow s p) ev = dbg s $ tryStep p ev
+tryStep (DebugShow _ p) ev =  tryStep p ev
 
 
 candidates :: (Ord ev) => ProcExp ev -> S.Set ev
@@ -155,5 +149,3 @@ skipExists (Parallel _ Skip)  = True
 skipExists (Parallel p1 p2)   = skipExists p1 || skipExists p2
 skipExists _                  = False
 
---(|<=) :: (Data ev, Eq ev, Ord ev, Read ev, Show ev) => ProcExp ev -> ProcExp ev -> Bool
---p0 |<= p1 

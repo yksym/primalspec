@@ -1,6 +1,3 @@
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TupleSections #-}
-
 module PrimalSpec.ConstrUtil
 ( argOf
 , constrNameOf
