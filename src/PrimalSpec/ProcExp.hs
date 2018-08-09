@@ -17,10 +17,12 @@ module PrimalSpec.ProcExp
 , candidates
 , simp
 , tryStep
+, module PrimalSpec.Util
 , Data
 ) where
 
 import PrimalSpec.ConstrUtil
+import PrimalSpec.Util
 import Control.Applicative as A
 import Data.Data (Data)
 import Data.Monoid ((<>))
@@ -90,7 +92,6 @@ infixr 4  -->, ?->, &->, &!->, *!* --, *%*
 
 infixl 3 >>>,  |=|, <|>, <||>
 
-
 -- ✓ がないので意味論変えてる
 simp :: (Show ev, Data ev) => ProcExp ev -> ProcExp ev
 simp (Interrupt Skip _)              = Skip
@@ -105,11 +106,11 @@ simp (ExternalChoise Stop p2)       = simp p2
 simp (ExternalChoise p1 p2)         = ExternalChoise (simp p1) (simp p2)
 simp (Parallel Skip Skip)           = Skip
 simp (Parallel p1 p2)               = Parallel (simp p1) (simp p2)
-simp (DebugShow _ p)                = simp p
+simp (DebugShow s p)                = DebugShow s $ simp p
 simp p = p
 
 
-tryStep :: (Data ev, Eq ev, Show ev) => ProcExp ev -> ev -> Maybe (ProcExp ev)
+tryStep :: (UseDebugShow, Data ev, Eq ev, Show ev) => ProcExp ev -> ev -> Maybe (ProcExp ev)
 tryStep Skip _ = Nothing
 tryStep Stop _ = Nothing
 tryStep (Prefix ev1 p) ev2 | ev1 == ev2 = Just p
@@ -136,7 +137,7 @@ tryStep (Parallel p1 p2) ev = Parallel <$> p1' <*> p2'
     where
         p1'  = tryStep p1 ev
         p2'  = tryStep p2 ev
-tryStep (DebugShow _ p) ev = tryStep p ev
+tryStep (DebugShow s p) ev = dbg s $ tryStep p ev
 
 
 candidates :: (Ord ev) => ProcExp ev -> S.Set ev

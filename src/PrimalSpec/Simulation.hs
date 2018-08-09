@@ -7,16 +7,21 @@ module PrimalSpec.Simulation
 , autoStep
 ) where
 
-
 import PrimalSpec.ProcExp
-import PrimalSpec.Util
 import Data.Monoid ((<>))
 import Data.Maybe (isJust, fromJust)
 import System.IO (hSetBuffering, stdout, BufferMode(..))
 import Data.Set as S
 
+
+tryStep' :: (Data ev, Eq ev, Show ev) => ProcExp ev -> ev -> Maybe (ProcExp ev)
+tryStep'  = useDebugShow NoDebugShow tryStep
+
+tryStepDbg :: (Data ev, Eq ev, Show ev) => ProcExp ev -> ev -> Maybe (ProcExp ev)
+tryStepDbg  = useDebugShow StdOutDebugShow tryStep
+
 askEv :: (Data ev, Eq ev, Read ev, Show ev) => ProcExp ev -> IO ev
-askEv p = askStdIn "input acceptable event" (isJust . tryStep p)
+askEv p = askStdIn "input acceptable event" (isJust . tryStep' p)
 
 
 askEvByIdx :: (Data ev, Eq ev, Read ev, Show ev) => [ev] -> ProcExp ev -> IO ev
@@ -38,10 +43,10 @@ repl p0 = do
     go $ simp p0
     where
         go p = do
-            let evs = [ev | ev <- S.toList $ candidates p, isJust $ tryStep p ev]
+            let evs = [ev | ev <- S.toList $ candidates p, isJust $ tryStep' p ev]
             print p
             ev <- if Prelude.null evs then askEv p else askEvByIdx evs p
-            go $ simp $ fromJust $ tryStep p ev
+            go $ simp $ fromJust $ tryStepDbg p ev
 
 -- 1通りのトレースしか起き得ない場合、それを辿る
 autoStep :: (Data ev, Eq ev, Ord ev, Read ev, Show ev) => (ev -> IO ()) -> ProcExp ev -> IO (ProcExp ev)
@@ -49,11 +54,11 @@ autoStep eventHandler p0 = go $ simp p0
     where
         go p | skipExists p = return p
              | otherwise    = do
-               let evs = [ev | ev <- S.toList $ candidates p, isJust $ tryStep p ev]
+               let evs = [ev | ev <- S.toList $ candidates p, isJust $ tryStep' p ev]
                case evs of
                    [ev] -> do
                        eventHandler ev
-                       go $ simp $ fromJust $ tryStep p ev
+                       go $ simp $ fromJust $ tryStepDbg p ev
                    _    -> return p
 
 

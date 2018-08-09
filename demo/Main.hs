@@ -38,27 +38,27 @@ complexCalc s = s_t_ "what is n?" (\n -> (n + (s ^. vmCoin)) `mod` 4 == 1)
 
 
 vm :: UseSuchThat => VMState -> Process
-vm s
-  | s ^. juice == 0           =  Fill ?-> \n -> vm (s &~ do { vmCoin .= complexCalc s; juice += n; })
+vm s = "vm" *!* if
+  | s ^. juice == 0   -> Fill ?-> \n -> vm (s &~ do { vmCoin .= complexCalc s; juice += n; })
 
-  | s ^. juice == 1           =  Coin --> Juice --> vm (s &~ do { vmCoin += 1; juice -= 1; })
-                             |=| Fill ?-> \n -> vm (s &~ do { vmCoin .= complexCalc s; juice += n; })
+  | s ^. juice == 1   -> Coin --> Juice --> vm (s &~ do { vmCoin += 1; juice -= 1; })
+                         |=| Fill ?-> \n -> vm (s &~ do { vmCoin .= complexCalc s; juice += n; })
 
-  | s ^. juice >  1           =  Coin --> Juice -->
-                                   (   vm (s &~ do { vmCoin += 1; juice -= 1; })
+  | s ^. juice >  1   -> Coin --> Juice -->
+                               (   vm (s &~ do { vmCoin += 1; juice -= 1; })
                                    |=| Bingo --> Juice --> vm (s &~ do { vmCoin += 1; juice -= 2; })
-                                   )
-                             |=| Fill ?-> \n -> vm (s &~ do { vmCoin .= complexCalc s; juice += n; })
+                               )
+                         |=| Fill ?-> \n -> vm (s &~ do { vmCoin .= complexCalc s; juice += n; })
 
-  | otherwise                 = Stop
+  | otherwise         -> Stop
 
 test :: Process
 test = Coin --> Juice --> Coin --> Juice --> Fill 1 --> Coin --> Juice --> Skip
 
 main :: IO ()
 --main = useSuchThat StdInSuchThatImpl $ repl entry
---main = useSuchThat StdInSuchThatImpl $ repl $ entry <||> test
-main = do
-    _ <- useSuchThat StdInSuchThatImpl $ autoStep print $ entry <||> test
-    return ()
+main = useSuchThat StdInSuchThatImpl $ repl $ entry <||> test
+--main = do
+--    _ <- useSuchThat StdInSuchThatImpl $ autoStep print $ entry <||> test
+--    return ()
 
