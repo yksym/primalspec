@@ -23,16 +23,19 @@ dependencies:
 - lens
 - reflection
 - containers
+- data-default
 
 default-extensions:
-  - GADTs
-  - FlexibleContexts
-  - ConstraintKinds
-  - ExistentialQuantification
-  - MultiWayIf
-  - TupleSections
-  - RankNTypes
-  - TemplateHaskell
+- GADTs
+- FlexibleContexts
+- Strict
+- StrictData
+- ConstraintKinds
+- ExistentialQuantification
+- MultiWayIf
+- TupleSections
+- RankNTypes
+- TemplateHaskell
 
 
 library:

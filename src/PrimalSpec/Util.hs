@@ -19,12 +19,11 @@ void m = m >> return ()
 ask' :: (Read a) => IO (Maybe a) -> String -> (a -> Bool) -> IO a
 ask' s q p = do
     ans <- s
-    ans' <- maybe (putStrLn "Parse Failed! Try Again!!" >> askStdIn q p) return ans
-    if p ans' then return ans'
-             else do
-                    putStrLn "Check Failed! Try Again!!"
-                    askStdIn q p
-
+    case ans of
+        Just ans' -> if p ans'
+            then return ans'
+            else putStrLn "Check Failed! Try Again!!" >> askStdIn q p
+        Nothing -> putStrLn "Parse Failed! Try Again!!" >> askStdIn q p
 
 askStdIn :: (Read a) => String -> (a -> Bool) -> IO a
 askStdIn q p = do

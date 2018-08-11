@@ -49,12 +49,19 @@ vm s = s *?* if
 
   | otherwise         -> Stop
 
-test :: UseSuchThat => Process
-test = Coin --> Juice --> Coin --> Juice --> (2::Int) *!* Fill 1 --> Coin --> Juice --> Skip
+testcase :: UseSuchThat => Process
+testcase = Coin --> Juice --> Coin --> Juice --> (2::Int) *!* Fill 1 --> Coin --> Juice --> Skip
+
+
+testRepl :: IO ()
+testRepl = useStdInSuchThat $ repl $ entry <||> testcase
+
+testAuto :: IO ()
+testAuto = do
+    ref <- newIORef ""
+    useIORefSuchThat ref $ void $ autoStep $ entry <||> testcase
 
 main :: IO ()
---main = useStdInSuchThatImpl $ repl $ entry <||> test
-main = do
-    ref <- newIORef ""
-    useIORefSuchThat ref $ void $ autoStep $ entry <||> test
+main = testRepl
+--main = testAuto
 

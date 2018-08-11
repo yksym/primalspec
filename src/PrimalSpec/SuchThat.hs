@@ -1,7 +1,5 @@
 module PrimalSpec.SuchThat
 ( SomeSuchThat
-, StdInSuchThatImpl(..)
---, IORefSuchThatImpl(..)
 , UseSuchThat
 , useSuchThat
 , useStdInSuchThat
@@ -13,7 +11,6 @@ module PrimalSpec.SuchThat
 
 import Data.Reflection (Given, give, given)
 import System.IO.Unsafe (unsafePerformIO)
---import Data.IORef
 import PrimalSpec.Util
 import Data.IORef
 
