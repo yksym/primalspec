@@ -24,7 +24,6 @@ import Data.Data (Data)
 import Data.Monoid ((<>))
 import Data.Set as S
 import Data.Maybe (isJust)
-import Data.Default
 import Text.Printf (printf)
 
 
@@ -32,7 +31,7 @@ data ProcExp ev
     = Stop
     | Skip
     | Prefix ev (ProcExp ev)
-    | forall a. (Default a) => Recv (a -> ev) (a -> ProcExp ev)
+    | forall a. Recv (a -> ev) (a -> ProcExp ev)
     | ExternalChoise (ProcExp ev) (ProcExp ev)
     | Interrupt (ProcExp ev) (ProcExp ev)
     | Sequential (ProcExp ev) (ProcExp ev)
@@ -59,7 +58,7 @@ instance forall ev. (Show ev, Data ev) => Show (ProcExp ev) where
 (-->) :: ev -> ProcExp ev -> ProcExp ev
 (-->) = Prefix
 
-(?->) :: (Default a) => (a -> ev) -> (a -> ProcExp ev) -> ProcExp ev
+(?->) :: (a -> ev) -> (a -> ProcExp ev) -> ProcExp ev
 (?->) = Recv
 
 -- guard
