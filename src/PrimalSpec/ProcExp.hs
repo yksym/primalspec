@@ -9,10 +9,10 @@ module PrimalSpec.ProcExp
 -- , (PrimalSpec.ProcExp.<|>)
 , (<||>)
 , (>>>)
-, skipExists
 , candidates
 , simp
 , tryStep
+, isTerminable
 , module PrimalSpec.Util
 , Data
 ) where
@@ -23,7 +23,7 @@ import Control.Applicative as A
 import Data.Data (Data)
 import Data.Monoid ((<>))
 import Data.Set as S
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, isNothing)
 import Text.Printf (printf)
 
 
@@ -88,20 +88,43 @@ infixr 4  -->, ?->, &->, &!->, *?*
 infixl 3 >>>,  |=|, <||> -- <|>, 
 
 simp :: (Show ev, Data ev) => ProcExp ev -> ProcExp ev
---simp (Interrupt Skip _)              = Skip
---simp (Interrupt Stop _)              = Stop
---simp (Interrupt (Sequential Skip p) _) = simp p
---simp (Interrupt p1 p2)              = Interrupt (simp p1) (simp p2)
-simp (Sequential Skip p)            = simp p
-simp (Sequential Stop _)            = Stop
-simp (Sequential p1 p2)             = Sequential (simp p1) p2
+simp (Sequential p1 p2)             = case simp p1 of
+    Stop   -> Stop
+    p1'    -> Sequential p1' p2
 simp (ExternalChoise p1 Stop)       = simp p1
 simp (ExternalChoise Stop p2)       = simp p2
 simp (ExternalChoise p1 p2)         = ExternalChoise (simp p1) (simp p2)
-simp (Parallel Skip Skip)           = Skip
+simp (Parallel Stop _)              = Stop
+simp (Parallel _ Stop )             = Stop
 simp (Parallel p1 p2)               = Parallel (simp p1) (simp p2)
 simp (DebugShow s p)                = DebugShow s $ simp p
 simp p = p
+
+
+isTerminable :: (Data ev, Eq ev, Show ev) => ProcExp ev -> Bool
+isTerminable Skip = True
+isTerminable Stop = False
+isTerminable (Prefix _ _) = False
+isTerminable (Recv _ _)   = False
+isTerminable (ExternalChoise p1 p2)
+    | p1' && p2' = error "ExternalChoise for same event!!"
+    | otherwise  = p1' || p2'
+    where
+        p1' = isTerminable p1
+        p2' = isTerminable p2
+isTerminable (Sequential p1 p2)
+    | p1' && p2' = True
+    | otherwise  = False
+    where
+        p1' = isTerminable p1
+        p2' = isTerminable p2
+isTerminable (Parallel p1 p2)
+    | p1' && p2' = True
+    | otherwise  = False
+    where
+        p1' = isTerminable p1
+        p2' = isTerminable p2
+isTerminable (DebugShow _ p) =  isTerminable p
 
 
 tryStep :: (Data ev, Eq ev, Show ev) => ProcExp ev -> ev -> Maybe (ProcExp ev)
@@ -110,16 +133,20 @@ tryStep Stop _ = Nothing
 tryStep (Prefix ev1 p) ev2 | ev1 == ev2 = Just p
                            | otherwise  = Nothing
 tryStep (Recv ev1c p) ev2 = p <$> argOf ev2 ev1c
-
 tryStep (ExternalChoise p1 p2) ev
     | isJust p1' && isJust p2' = error "ExternalChoise for same event!!"
     | otherwise  = p1' A.<|> p2'
     where
         p1' = tryStep p1 ev
         p2' = tryStep p2 ev
-tryStep (Sequential Skip p2) ev = tryStep p2 ev
-tryStep (Sequential p1 p2) ev = Sequential <$> tryStep p1 ev <*> Just p2
---tryStep (InternalChoise p1 p2) ev = tryStep (chooseIC p1 p2) ev
+tryStep (Sequential p1 p2) ev
+    | isJust p1' && not b1 || isNothing p2' = Sequential <$> p1' <*> Just p2
+    | b1  && isNothing p1' && isJust p2'    = p2'
+    | otherwise = Nothing
+    where
+        p1' = tryStep p1 ev
+        p2' = tryStep p2 ev
+        b1 = isTerminable p1
 --tryStep (Interrupt p1 p2) ev
 --    | isJust p1' && isJust p2' = error "Interrupt for same event!!"
 --    | isJust p2' = p2'
@@ -141,11 +168,4 @@ candidates (ExternalChoise p1 p2) = candidates p1 `S.union` candidates p2
 --candidates (Parallel p1 p2) = candidates p1 `S.intersection` candidates p2
 candidates (Parallel p1 p2) = candidates p1 `S.union` candidates p2
 candidates _ = S.empty
-
-skipExists :: ProcExp ev -> Bool
-skipExists Skip               = True
-skipExists (Parallel Skip _)  = True
-skipExists (Parallel _ Skip)  = True
-skipExists (Parallel p1 p2)   = skipExists p1 || skipExists p2
-skipExists _                  = False
 
