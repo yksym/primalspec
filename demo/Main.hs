@@ -34,11 +34,11 @@ initState = VMState {
 complexCalc :: UseSuchThat => Int -> Int
 complexCalc n = s_t_ "what is n?" $ \n' -> n' == (n + 1)
 
-maintenance :: Process
-maintenance = Maintanance --> nop %-> Skip
-
 entry :: UseSuchThat => Process
 entry = inService <|> maintenance
+
+maintenance :: Process
+maintenance = Maintanance --> nop %-> Skip
 
 outOfService :: UseSuchThat => Process
 outOfService = Fill ?-> \n -> do { vmCoin .= complexCalc 1 ; juice += n; } %-> inService
