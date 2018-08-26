@@ -4,21 +4,11 @@ module PrimalSpec.Util
 , askStringIORef
 , interleave
 , void
---, Eval
---, eval
---, throwError, get, put
---, either2maybe
 ) where
 
 import Text.Read (readMaybe)
 import Data.IORef
 import Data.List (transpose)
-
---import Data.Functor.Identity (Identity, runIdentity)
---import Control.Monad.State (StateT, runStateT)
---import Control.Monad.Except (ExceptT, runExceptT)
---import Control.Monad.State.Class
---import Control.Monad.Error.Class
 
 
 interleave :: [a] -> [a] -> [a]
@@ -46,17 +36,5 @@ askIORef ref = ask' $ Just <$> readIORef ref
 
 askStringIORef :: (Read a) => IORef String -> String -> (a -> Bool) -> IO a
 askStringIORef ref = ask' $ readMaybe <$> readIORef ref
-
---either2maybe :: Either a b -> Maybe b
---either2maybe (Right x) = Just x
---either2maybe (Left _) = Nothing
---
---type Eval s e a = StateT s (ExceptT e Identity) a
---
---eval :: Eval s e a -> s -> Maybe (a, s)
---eval m x = either2maybe $ runIdentity $ runExceptT $ runStateT m x
---
---isSuccess :: Eval s e a -> Bool
---isSuccess m = eval
 
 
