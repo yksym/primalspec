@@ -6,7 +6,7 @@ module PrimalSpec.ProcExp
 , (&->)
 , (|=|)
 , (PrimalSpec.ProcExp.<|>)
-, (<||>)
+-- , (<||>)
 , (>>>)
 , candidates
 , simp
@@ -39,7 +39,7 @@ data ProcExp s ev
     | ExternalChoise (ProcExp s ev) (ProcExp s ev)
     | Interrupt (ProcExp s ev) (ProcExp s ev)
     | Sequential (ProcExp s ev) (ProcExp s ev)
-    | Parallel (ProcExp s ev) (ProcExp s ev)
+    -- | Parallel (ProcExp s ev) (ProcExp s ev)
     | Load (s -> ProcExp s ev)
 
 instance forall ev s. (Show ev, Data ev) => Show (ProcExp s ev) where
@@ -51,7 +51,7 @@ instance forall ev s. (Show ev, Data ev) => Show (ProcExp s ev) where
         go depth pre (ExternalChoise p1 p2) = indent depth <> pre <> "|=|" <> endl <> mconcat [go (depth+1) "" p | p <- [p1, p2]]
         go depth pre (Interrupt p1 p2)      = indent depth <> pre <> "<|>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
         go depth pre (Sequential p1 p2)     = indent depth <> pre <> " ; " <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
-        go depth pre (Parallel p1 p2)       = indent depth <> pre <> "<||>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
+        --go depth pre (Parallel p1 p2)       = indent depth <> pre <> "<||>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
         go depth pre (Load _)               = indent depth <> pre <> "???"
         indent n = replicate (2*n) ' '
         endl = "\n"
@@ -81,13 +81,13 @@ infixr 4  -->, ?->, &->, %-> -- *?*,
 (<|>) :: ProcExp s ev -> ProcExp s ev -> ProcExp s ev
 (<|>) = Interrupt
 
-(<||>) :: ProcExp s ev -> ProcExp s ev -> ProcExp s ev
-(<||>) = Parallel
+--(<||>) :: ProcExp s ev -> ProcExp s ev -> ProcExp s ev
+--(<||>) = Parallel
 
 (>>>) :: ProcExp s ev -> ProcExp s ev -> ProcExp s ev
 (>>>) = Sequential
 
-infixl 3 >>>,  |=|, <||>, <|>
+infixl 3 >>>,  |=|, <|> -- <||>, 
 
 simp :: (Show ev, Data ev) => ProcExp s ev -> ProcExp s ev
 simp (Sequential p1 p2)             = case simp p1 of
@@ -101,9 +101,9 @@ simp (Interrupt p1 p2)              = case (simp p1, simp p2) of
     (Stop, p2')    -> p2'
     (p1', Stop)    -> p1'
     _              -> Interrupt p1 p2
-simp (Parallel Stop _)              = Stop
-simp (Parallel _ Stop )             = Stop
-simp (Parallel p1 p2)               = Parallel (simp p1) (simp p2)
+--simp (Parallel Stop _)              = Stop
+--simp (Parallel _ Stop )             = Stop
+--simp (Parallel p1 p2)               = Parallel (simp p1) (simp p2)
 simp p = p
 
 
@@ -128,12 +128,12 @@ isTerminable (Interrupt p1 p2) = p1' || p2'
     where
         p1' = isTerminable p1
         p2' = isTerminable p2
-isTerminable (Parallel p1 p2)
-    | p1' && p2' = True
-    | otherwise  = False
-    where
-        p1' = isTerminable p1
-        p2' = isTerminable p2
+--isTerminable (Parallel p1 p2)
+--    | p1' && p2' = True
+--    | otherwise  = False
+--    where
+--        p1' = isTerminable p1
+--        p2' = isTerminable p2
 isTerminable (Load _) = error "Load is detected in check termination"
 
 
@@ -170,13 +170,13 @@ tryStep (Sequential p1 p2) ev
         p1' = tryStep p1 ev
         p2' = tryStep p2 ev
         b1 = isTerminable p1
-tryStep (Parallel p1 p2) ev = do
-        p1'' <- p1'
-        p2'' <- p2'
-        return $ Parallel <$> p1'' <*> p2''
-    where
-        p1'  = tryStep p1 ev
-        p2'  = tryStep p2 ev
+--tryStep (Parallel p1 p2) ev = do
+--        p1'' <- p1'
+--        p2'' <- p2'
+--        return $ Parallel <$> p1'' <*> p2''
+--    where
+--        p1'  = tryStep p1 ev
+--        p2'  = tryStep p2 ev
 tryStep (Load _) _ = error "Load is detected in step"
 
 
@@ -185,7 +185,7 @@ candidates (Prefix ev _) = S.singleton ev
 candidates (ExternalChoise p1 p2) = candidates p1 `S.union` candidates p2
 candidates (Sequential p1 _) = candidates p1
 candidates (Interrupt p1 p2) = candidates p1 `S.union` candidates p2
-candidates (Parallel p1 p2) = candidates p1 `S.union` candidates p2
+--candidates (Parallel p1 p2) = candidates p1 `S.union` candidates p2
 candidates _ = S.empty
 
 load :: s -> ProcExp s ev -> ProcExp s ev
@@ -193,6 +193,6 @@ load s (Load f) = load s $ f s
 load s (ExternalChoise p1 p2) = ExternalChoise (load s p1) (load s p2)
 load s (Sequential p1 p2)     = Sequential (load s p1) (load s p2)
 load s (Interrupt p1 p2)      = Interrupt (load s p1) p2
-load s (Parallel p1 p2)       = Parallel (load s p1) (load s p2)
+--load s (Parallel p1 p2)       = Parallel (load s p1) (load s p2)
 load _ p = p
 
