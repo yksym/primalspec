@@ -23,6 +23,7 @@ dependencies:
 - lens
 - reflection
 - containers
+- mtl
 
 default-extensions:
 - GADTs

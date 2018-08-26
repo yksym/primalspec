@@ -1,10 +1,9 @@
 module PrimalSpec.ProcExp
-( ProcExp(Stop, Skip)
+( ProcExp(Stop, Skip, Load)
 , (-->)
+, (%->)
 , (?->)
 , (&->)
-, (&!->)
-, (*?*)
 , (|=|)
 , (PrimalSpec.ProcExp.<|>)
 , (<||>)
@@ -15,30 +14,35 @@ module PrimalSpec.ProcExp
 , isTerminable
 , module PrimalSpec.Util
 , Data
+, load
+, nop
 ) where
 
 import PrimalSpec.ConstrUtil
 import PrimalSpec.Util
 import Control.Applicative as A
+import Control.Monad.State
 import Data.Data (Data)
 import Data.Monoid ((<>))
 import Data.Set as S
 import Data.Maybe (isJust, isNothing)
-import Text.Printf (printf)
+--import Text.Printf (printf)
 
 
-data ProcExp ev
+data Store s a = Store (State s ()) a
+
+data ProcExp s ev
     = Stop
     | Skip
-    | Prefix ev (ProcExp ev)
-    | forall a. Recv (a -> ev) (a -> ProcExp ev)
-    | ExternalChoise (ProcExp ev) (ProcExp ev)
-    | Interrupt (ProcExp ev) (ProcExp ev)
-    | Sequential (ProcExp ev) (ProcExp ev)
-    | Parallel (ProcExp ev) (ProcExp ev)
-    | forall a. (Show a) => DebugShow a (ProcExp ev)
+    | Prefix ev (Store s (ProcExp s ev))
+    | forall a. Recv (a -> ev) (a -> Store s (ProcExp s ev))
+    | ExternalChoise (ProcExp s ev) (ProcExp s ev)
+    | Interrupt (ProcExp s ev) (ProcExp s ev)
+    | Sequential (ProcExp s ev) (ProcExp s ev)
+    | Parallel (ProcExp s ev) (ProcExp s ev)
+    | Load (s -> ProcExp s ev)
 
-instance forall ev. (Show ev, Data ev) => Show (ProcExp ev) where
+instance forall ev s. (Show ev, Data ev) => Show (ProcExp s ev) where
     show = go 0 "" where
         go depth pre Skip                   = indent depth <> pre <> "Skip" <> endl
         go depth pre Stop                   = indent depth <> pre <> "Stop" <> endl
@@ -48,46 +52,44 @@ instance forall ev. (Show ev, Data ev) => Show (ProcExp ev) where
         go depth pre (Interrupt p1 p2)      = indent depth <> pre <> "<|>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
         go depth pre (Sequential p1 p2)     = indent depth <> pre <> " ; " <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
         go depth pre (Parallel p1 p2)       = indent depth <> pre <> "<||>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
-        go depth pre (DebugShow s p)        = indent depth <> pre <> s' <> endl <> go depth pre p
-            where
-            s' = printf "--dbg: %s\n" $ show s
+        go depth pre (Load _)               = indent depth <> pre <> "???"
         indent n = replicate (2*n) ' '
         endl = "\n"
 
-
-(-->) :: ev -> ProcExp ev -> ProcExp ev
+(-->) :: ev -> Store s (ProcExp s ev) -> ProcExp s ev
 (-->) = Prefix
 
-(?->) :: (a -> ev) -> (a -> ProcExp ev) -> ProcExp ev
+(?->) :: (a -> ev) -> (a -> Store s (ProcExp s ev)) -> ProcExp s ev
 (?->) = Recv
 
 -- guard
-(&->) :: Bool -> ProcExp ev -> ProcExp ev
+(&->) :: Bool -> ProcExp s ev -> ProcExp s ev
 b &-> p = if b then p else Stop
 
-(*?*) :: (Show a) => a -> ProcExp ev -> ProcExp ev
-(*?*) =  DebugShow
+-- update
+(%->) :: State s () -> ProcExp s ev -> Store s (ProcExp s ev)
+(%->) = Store
 
-(&!->) :: Bool -> ProcExp ev -> ProcExp ev
-b &!-> p =  if b then p else "assert failed" *?* Stop
+nop :: State s ()
+nop = return ()
 
-infixr 4  -->, ?->, &->, &!->, *?*
+infixr 4  -->, ?->, &->, %-> -- *?*, 
 
-(|=|) :: ProcExp ev -> ProcExp ev -> ProcExp ev
+(|=|) :: ProcExp s ev -> ProcExp s ev -> ProcExp s ev
 (|=|) = ExternalChoise
 
-(<|>) :: ProcExp ev -> ProcExp ev -> ProcExp ev
+(<|>) :: ProcExp s ev -> ProcExp s ev -> ProcExp s ev
 (<|>) = Interrupt
 
-(<||>) :: ProcExp ev -> ProcExp ev -> ProcExp ev
+(<||>) :: ProcExp s ev -> ProcExp s ev -> ProcExp s ev
 (<||>) = Parallel
 
-(>>>) :: ProcExp ev -> ProcExp ev -> ProcExp ev
+(>>>) :: ProcExp s ev -> ProcExp s ev -> ProcExp s ev
 (>>>) = Sequential
 
 infixl 3 >>>,  |=|, <||>, <|>
 
-simp :: (Show ev, Data ev) => ProcExp ev -> ProcExp ev
+simp :: (Show ev, Data ev) => ProcExp s ev -> ProcExp s ev
 simp (Sequential p1 p2)             = case simp p1 of
     Stop   -> Stop
     p1'    -> Sequential p1' p2
@@ -102,11 +104,10 @@ simp (Interrupt p1 p2)              = case (simp p1, simp p2) of
 simp (Parallel Stop _)              = Stop
 simp (Parallel _ Stop )             = Stop
 simp (Parallel p1 p2)               = Parallel (simp p1) (simp p2)
-simp (DebugShow s p)                = DebugShow s $ simp p
 simp p = p
 
 
-isTerminable :: (Data ev, Eq ev, Show ev) => ProcExp ev -> Bool
+isTerminable :: (Data ev, Eq ev, Show ev) => ProcExp s ev -> Bool
 isTerminable Skip = True
 isTerminable Stop = False
 isTerminable (Prefix _ _) = False
@@ -133,48 +134,65 @@ isTerminable (Parallel p1 p2)
     where
         p1' = isTerminable p1
         p2' = isTerminable p2
-isTerminable (DebugShow _ p) =  isTerminable p
+isTerminable (Load _) = error "Load is detected in check termination"
 
 
-tryStep :: (Data ev, Eq ev, Show ev) => ProcExp ev -> ev -> Maybe (ProcExp ev)
+tryStep :: (Data ev, Eq ev, Show ev) => ProcExp s ev -> ev -> Maybe (State s (ProcExp s ev))
 tryStep Skip _ = Nothing
 tryStep Stop _ = Nothing
-tryStep (Prefix ev1 p) ev2 | ev1 == ev2 = Just p
-                           | otherwise  = Nothing
-tryStep (Recv ev1c p) ev2 = p <$> argOf ev2 ev1c
+tryStep (Prefix ev1 (Store m p)) ev2 | ev1 == ev2 = Just $ m >> return p
+                                     | otherwise = Nothing
+tryStep (Recv ev1c p) ev2 = case p <$> argOf ev2 ev1c of
+    Just (Store m p') -> Just $ m >> return p'
+    Nothing -> Nothing
 tryStep (ExternalChoise p1 p2) ev
-    | isJust p1' && isJust p2' = error "ExternalChoise for same event!!"
+    | isJust p1' && isJust p2' = error "ExternalChoise for same event!!" -- how does monad transfer treat this without s ??
     | otherwise  = p1' A.<|> p2'
     where
         p1' = tryStep p1 ev
         p2' = tryStep p2 ev
+tryStep (Interrupt p1 p2) ev
+    | isJust p1' && isJust p2' = error "Interrupt for same event!!"
+    | isJust p2' = p2'
+    | otherwise  = do
+        p1'' <- p1'
+        return $ Interrupt <$> p1'' <*> return p2
+    where
+        p1' = tryStep p1 ev
+        p2' = tryStep p2 ev
 tryStep (Sequential p1 p2) ev
-    | isJust p1' && not b1 || isNothing p2' = Sequential <$> p1' <*> Just p2
+    | isJust p1' && not b1 || isNothing p2' = do
+        p1'' <- p1'
+        return $ Sequential <$> p1'' <*> return p2
     | b1  && isNothing p1' && isJust p2'    = p2'
     | otherwise = Nothing
     where
         p1' = tryStep p1 ev
         p2' = tryStep p2 ev
         b1 = isTerminable p1
-tryStep (Interrupt p1 p2) ev
-    | isJust p1' && isJust p2' = error "Interrupt for same event!!"
-    | isJust p2' = p2'
-    | otherwise  = Interrupt <$> p1' <*> return p2
-    where
-        p1' = tryStep p1 ev
-        p2' = tryStep p2 ev
-tryStep (Parallel p1 p2) ev = Parallel <$> p1' <*> p2'
+tryStep (Parallel p1 p2) ev = do
+        p1'' <- p1'
+        p2'' <- p2'
+        return $ Parallel <$> p1'' <*> p2''
     where
         p1'  = tryStep p1 ev
         p2'  = tryStep p2 ev
-tryStep (DebugShow _ p) ev =  tryStep p ev
+tryStep (Load _) _ = error "Load is detected in step"
 
 
-candidates :: (Ord ev) => ProcExp ev -> S.Set ev
+candidates :: (Ord ev) => ProcExp s ev -> S.Set ev
 candidates (Prefix ev _) = S.singleton ev
 candidates (ExternalChoise p1 p2) = candidates p1 `S.union` candidates p2
+candidates (Sequential p1 _) = candidates p1
 candidates (Interrupt p1 p2) = candidates p1 `S.union` candidates p2
---candidates (Parallel p1 p2) = candidates p1 `S.intersection` candidates p2
 candidates (Parallel p1 p2) = candidates p1 `S.union` candidates p2
 candidates _ = S.empty
+
+load :: s -> ProcExp s ev -> ProcExp s ev
+load s (Load f) = load s $ f s
+load s (ExternalChoise p1 p2) = ExternalChoise (load s p1) (load s p2)
+load s (Sequential p1 p2)     = Sequential (load s p1) (load s p2)
+load s (Interrupt p1 p2)      = Interrupt (load s p1) p2
+load s (Parallel p1 p2)       = Parallel (load s p1) (load s p2)
+load _ p = p
 
