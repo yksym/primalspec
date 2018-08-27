@@ -320,12 +320,14 @@ Memory :: s -> ProcExp ev s
 Memory s = Load s --> Memory s |=| Store ?-> \m -> Memory (s &~ m)
 ```
 
-Load Store演算子を使って定義されたプロセスPは、Memory プロセスに対してCSPでいう所のインターフェース並行合成されたものと同じ振る舞いになります。
+Load Store演算子を使って定義されたプロセスPは、Memory プロセスに対してCSPでいう所のインターフェース並行合成されたものとほぼ同じ振る舞いになります。
 
 ```
 (P [|{Load, Store|}|] Memory) \ {Load, Store}
 ```
 
+ただし、実際にはLoad/Storeはイベントの実行と不可分です。
+つまり、内部遷移では実行されず、Loadはイベント実行直前、Storeはイベント実行直後に行われます。
 
 
 ### eDSL
