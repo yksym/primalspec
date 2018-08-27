@@ -7,7 +7,7 @@ module PrimalSpec.Simulation
 import PrimalSpec.ProcExp
 import Control.Monad.State
 import Data.Monoid ((<>))
-import Data.Maybe (isJust, fromJust)
+import Data.Maybe (isJust, fromJust, fromMaybe)
 import System.IO (hSetBuffering, stdout, BufferMode(..))
 import Data.Set as S
 
@@ -64,7 +64,7 @@ batchStep s0 p0 evs0 = do
         go _ Stop _ = error "cannot trans"
         go s p (ev:evs)= do
                putStrLn $ "* " <> show ev
-               let m = fromJust $ tryStep s p ev
+               let m = fromMaybe (error $ "cannot trans " <> show ev) $ tryStep s p ev
                let (p', s') = runState m s
                printProcExp s' p'
                go s' (simp p') evs
