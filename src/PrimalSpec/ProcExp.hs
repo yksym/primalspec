@@ -220,6 +220,7 @@ load s (Load f) = load s $ f s
 load s (ExternalChoise p1 p2) = ExternalChoise (load s p1) (load s p2)
 load s (Sequential p1 p2)     = Sequential (load s p1) (load s p2)
 load s (Interrupt p1 p2)      = Interrupt (load s p1) (load s p2)
+load s (RetInterrupt p1 p2)   = RetInterrupt (load s p1) (load s p2)
 --load s (Parallel p1 p2)       = Parallel (load s p1) (load s p2)
 load _ p = p
 
