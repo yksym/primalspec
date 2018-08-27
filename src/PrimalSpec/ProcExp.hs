@@ -7,7 +7,8 @@ module PrimalSpec.ProcExp
 , (|=|)
 , (PrimalSpec.ProcExp.<|>)
 , (<@>)
--- , (<||>)
+, (<||>)
+, (|||)
 , (>>>)
 , candidates
 , simp
@@ -41,7 +42,8 @@ data ProcExp s ev
     | Interrupt (ProcExp s ev) (ProcExp s ev)
     | RetInterrupt (ProcExp s ev) (ProcExp s ev)
     | Sequential (ProcExp s ev) (ProcExp s ev)
-    -- | Parallel (ProcExp s ev) (ProcExp s ev)
+    | Parallel (ProcExp s ev) (ProcExp s ev)
+    | Interleave (ProcExp s ev) (ProcExp s ev)
     | Load (s -> ProcExp s ev)
 
 instance forall ev s. (Show ev, Data ev) => Show (ProcExp s ev) where
@@ -54,7 +56,8 @@ instance forall ev s. (Show ev, Data ev) => Show (ProcExp s ev) where
         go depth pre (Interrupt p1 p2)      = indent depth <> pre <> "<|>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
         go depth pre (RetInterrupt p1 p2)   = indent depth <> pre <> "<@>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
         go depth pre (Sequential p1 p2)     = indent depth <> pre <> " ; " <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
-        --go depth pre (Parallel p1 p2)       = indent depth <> pre <> "<||>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
+        go depth pre (Parallel p1 p2)       = indent depth <> pre <> "<||>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
+        go depth pre (Interleave p1 p2)     = indent depth <> pre <> "|||" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
         go depth pre (Load _)               = indent depth <> pre <> "???"
         indent n = replicate (2*n) ' '
         endl = "\n"
@@ -87,13 +90,16 @@ infixr 4  -->, ?->, &->, %-> -- *?*,
 (<@>) :: ProcExp s ev -> ProcExp s ev -> ProcExp s ev
 (<@>) = RetInterrupt
 
---(<||>) :: ProcExp s ev -> ProcExp s ev -> ProcExp s ev
---(<||>) = Parallel
+(<||>) :: ProcExp s ev -> ProcExp s ev -> ProcExp s ev
+(<||>) = Parallel
+
+(|||) :: ProcExp s ev -> ProcExp s ev -> ProcExp s ev
+(|||) = Interleave
 
 (>>>) :: ProcExp s ev -> ProcExp s ev -> ProcExp s ev
 (>>>) = Sequential
 
-infixl 3 >>>,  |=|, <|>, <@> -- <||>, 
+infixl 3 >>>,  |=|, <|>, <@>, <||>, |||
 
 simp :: (Show ev, Data ev) => ProcExp s ev -> ProcExp s ev
 simp (Sequential p1 p2)             = case simp p1 of
@@ -111,9 +117,12 @@ simp (RetInterrupt p1 p2)           = case (simp p1, simp p2) of
     (Stop, Stop)   -> Stop
     (p1', Stop)    -> p1'
     _              -> RetInterrupt p1 p2
---simp (Parallel Stop _)              = Stop
---simp (Parallel _ Stop )             = Stop
---simp (Parallel p1 p2)               = Parallel (simp p1) (simp p2)
+simp (Parallel Stop _)              = Stop
+simp (Parallel _ Stop )             = Stop
+simp (Parallel p1 p2)               = Parallel (simp p1) (simp p2)
+simp (Interleave Stop p2)           = simp p2
+simp (Interleave p1 Stop)           = simp p1
+simp (Interleave p1 p2)             = Interleave (simp p1) (simp p2)
 simp p = p
 
 
@@ -141,12 +150,18 @@ isTerminable (Interrupt p1 p2) = p1' || p2'
 isTerminable (RetInterrupt p1 _) = p1'
     where
         p1' = isTerminable p1
---isTerminable (Parallel p1 p2)
---    | p1' && p2' = True
---    | otherwise  = False
---    where
---        p1' = isTerminable p1
---        p2' = isTerminable p2
+isTerminable (Parallel p1 p2)
+    | p1' && p2' = True
+    | otherwise  = False
+    where
+        p1' = isTerminable p1
+        p2' = isTerminable p2
+isTerminable (Interleave p1 p2)
+    | p1' && p2' = True
+    | otherwise  = False
+    where
+        p1' = isTerminable p1
+        p2' = isTerminable p2
 isTerminable (Load _) = error "Load is detected in check termination"
 
 
@@ -194,13 +209,24 @@ tryStep s (Sequential p1 p2) ev
         p1' = tryStep s p1 ev
         p2' = tryStep s p2 ev
         b1 = isTerminable p1
---tryStep s (Parallel p1 p2) ev = do
---        p1'' <- p1'
---        p2'' <- p2'
---        return $ Parallel <$> p1'' <*> p2''
---    where
---        p1'  = tryStep s p1 ev
---        p2'  = tryStep s p2 ev
+tryStep s (Parallel p1 p2) ev = do
+        p1'' <- p1'
+        p2'' <- p2'
+        return $ Parallel <$> p1'' <*> p2''
+    where
+        p1'  = tryStep s p1 ev
+        p2'  = tryStep s p2 ev
+tryStep s (Interleave p1 p2) ev
+    | isJust p1' && isJust p2' = error "RetInterrupt for same event!!"
+    | isJust p2' = do
+        p2'' <- p2'
+        return $ Interleave <$> return p1 <*> p2''
+    | otherwise  = do
+        p1'' <- p1'
+        return $ Interleave <$> p1'' <*> return p2
+    where
+        p1'  = tryStep s p1 ev
+        p2'  = tryStep s p2 ev
 tryStep s (Load p) ev = tryStep s (p s) ev
 
 
@@ -210,7 +236,8 @@ candidates s (ExternalChoise p1 p2) = candidates s p1 `S.union` candidates s p2
 candidates s (Sequential p1 p2) = candidates s p1 `S.union` candidates s p2
 candidates s (Interrupt p1 p2) = candidates s p1 `S.union` candidates s p2
 candidates s (RetInterrupt p1 p2) = candidates s p1 `S.union` candidates s p2
---candidates (Parallel p1 p2) = candidates s p1 `S.union` candidates s p2
+candidates s (Parallel p1 p2) = candidates s p1 `S.union` candidates s p2
+candidates s (Interleave p1 p2) = candidates s p1 `S.union` candidates s p2
 candidates s (Load p) = candidates s (p s)
 candidates _ _ = S.empty
 
@@ -221,6 +248,7 @@ load s (ExternalChoise p1 p2) = ExternalChoise (load s p1) (load s p2)
 load s (Sequential p1 p2)     = Sequential (load s p1) (load s p2)
 load s (Interrupt p1 p2)      = Interrupt (load s p1) (load s p2)
 load s (RetInterrupt p1 p2)   = RetInterrupt (load s p1) (load s p2)
---load s (Parallel p1 p2)       = Parallel (load s p1) (load s p2)
+load s (Parallel p1 p2)       = Parallel (load s p1) (load s p2)
+load s (Interleave p1 p2)     = Interleave (load s p1) (load s p2)
 load _ p = p
 
