@@ -47,19 +47,22 @@ data ProcExp s ev
     | Load (s -> ProcExp s ev)
 
 instance forall ev s. (Show ev, Data ev) => Show (ProcExp s ev) where
-    show = go 0 "" where
-        go depth pre Skip                   = indent depth <> pre <> "Skip" <> endl
-        go depth pre Stop                   = indent depth <> pre <> "Stop" <> endl
-        go depth pre (Prefix ev _)          = indent depth <> pre <> show ev <> " -> ..." <> endl
-        go depth pre (Recv evc _)           = indent depth <> pre <> constrNameOf evc <> "?x -> ..." <> endl
-        go depth pre (ExternalChoise p1 p2) = indent depth <> pre <> "|=|" <> endl <> mconcat [go (depth+1) "" p | p <- [p1, p2]]
-        go depth pre (Interrupt p1 p2)      = indent depth <> pre <> "<|>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
-        go depth pre (RetInterrupt p1 p2)   = indent depth <> pre <> "<@>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
-        go depth pre (Sequential p1 p2)     = indent depth <> pre <> " ; " <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
-        go depth pre (Parallel p1 p2)       = indent depth <> pre <> "<||>" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
-        go depth pre (Interleave p1 p2)     = indent depth <> pre <> "|||" <> endl <> go (depth+1) "" p1 <> go (depth+1) "" p2
-        go depth pre (Load _)               = indent depth <> pre <> "???"
-        indent n = replicate (2*n) ' '
+    show = go [] where
+        go bs Skip                   = indent bs <> "Skip" <> endl
+        go bs Stop                   = indent bs <> "Stop" <> endl
+        go bs (Prefix ev _)          = indent bs <> show ev <> " -> ..." <> endl
+        go bs (Recv evc _)           = indent bs <> constrNameOf evc <> "?x -> ..." <> endl
+        go bs (ExternalChoise p1 p2) = indent bs <> "|=|"  <> endl <> go (bs++[True]) p1 <> go (bs++[False]) p2
+        go bs (Interrupt p1 p2)      = indent bs <> "<|>"  <> endl <> go (bs++[True]) p1 <> go (bs++[False]) p2
+        go bs (RetInterrupt p1 p2)   = indent bs <> "<@>"  <> endl <> go (bs++[True]) p1 <> go (bs++[False]) p2
+        go bs (Sequential p1 p2)     = indent bs <> " ; "  <> endl <> go (bs++[True]) p1 <> go (bs++[False]) p2
+        go bs (Parallel p1 p2)       = indent bs <> "<||>" <> endl <> go (bs++[True]) p1 <> go (bs++[False]) p2
+        go bs (Interleave p1 p2)     = indent bs <> "|||"  <> endl <> go (bs++[True]) p1 <> go (bs++[False]) p2
+        go bs (Load _)               = indent bs <> "???"
+        indent [] = "--* "
+        indent [True] = "  |----* "
+        indent [False] = "  `----* "
+        indent (b:bs) = (if b then "  |  " else "     ") <> indent bs
         endl = "\n"
 
 (-->) :: ev -> Store s (ProcExp s ev) -> ProcExp s ev
