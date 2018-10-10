@@ -23,6 +23,8 @@ dependencies:
 - lens
 - reflection
 - containers
+- bytestring
+- array
 - mtl
 
 default-extensions:
@@ -42,13 +44,16 @@ library:
 executables:
   primalspec-exe:
     main:                Main.hs
-    source-dirs:         demo
+    source-dirs:         app
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
     - primalspec
+    build-tools:
+    - happy
+    - alex
 
 tests:
   primalspec-test:

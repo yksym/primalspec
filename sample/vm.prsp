@@ -1,0 +1,28 @@
+%import { VMData  }
+%event  { VMEvent }
+%state  { VMState }
+%initstate { initState  }
+%entry vm
+
+%%
+
+vm := Load? s -> STOP
+vm := { s ^. numJuice > 0  } & Coin -> Juice -> Store.{ s ^. numJuice += 1 } -> vm
+vm := STOP [] STOP
+vm := ev-> STOP [] ev -> STOP
+vm := ev-> STOP [] {} & Fill.3 -> ev -> STOP
+
+vm := Load?s -> (
+     { s ^. numJuice > 0  } & Coin -> Juice -> Store.{ s ^. numJuice += 1 } -> vm
+     [] STOP
+     )
+
+vm := Load?s -> (
+     { s ^. numJuice > 0  } & Coin -> Juice -> Store.{ s ^. numJuice += 1 } -> vm
+     [] { s ^. numJuice == 0 } & Fill?n -> Store.{ s ^. numJuice += n } -> vm
+     )
+
+vm(i, k) := {i > 0} & Hoge -> k
+         [] {i == 0} & Hoge?j@{ j /= 3 } -> vm({i+1},k)
+
+
