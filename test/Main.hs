@@ -14,6 +14,8 @@ data VMState = VMState {
   , _juice    :: Int
 } deriving (Data, Eq, Ord, Read, Show)
 
+makeLenses ''VMState
+
 data VMEvent
     = Coin
     | Juice
@@ -23,7 +25,7 @@ data VMEvent
     | Disposal VMState
     deriving (Data, Eq, Ord, Read, Show)
 
-makeLenses ''VMState
+makePrisms ''VMEvent
 
 type Process = ProcExp VMState VMEvent
 
@@ -34,37 +36,32 @@ initState = VMState {
   , _juice  = 2
 }
 
-complexCalc :: UseSuchThat => Int -> Int
-complexCalc n = s_t_ "what is n?" $ \n' -> n' == (n + 1)
-
-entry :: UseSuchThat => Process
+entry :: Process
 entry = inService <|> maintenance
 
-maintenance :: UseSuchThat => Process
+maintenance :: Process
 maintenance = Load $ \s -> Maintanance --> nop %-> (entry |=| Disposal s --> nop %-> Skip)
 
-outOfService :: UseSuchThat => Process
-outOfService = Fill ?-> \n -> do { coin .= complexCalc 1 ; juice += n; } %-> inService
+outOfService :: Process
+outOfService = _Fill ?-> \n -> Just $ do { coin .= 10 ; juice += n; } %-> inService
 
-inService :: UseSuchThat => Process
+inService :: Process
 inService = Load $ \s -> outOfService |=| if
   | s ^. juice == 1   -> Coin --> do { coin += 1; } %-> Juice --> do {juice -= 1; } %-> inService
   | s ^. juice >  1   -> Coin --> do { coin += 1; } %-> Juice --> do {juice -= 1; } %->
                                ( inService |=| Bingo --> nop %-> Juice --> do {juice -= 1; } %-> inService )
   | otherwise         -> Stop
 
-testcase :: UseSuchThat => [VMEvent]
-testcase = [Coin, Juice, Coin, Juice, (2::Int) *!* Fill 1, Coin, Juice]
+testcase :: [VMEvent]
+testcase = [Coin, Juice, Coin, Juice, Fill 1, Coin, Juice]
 
 testRepl :: IO ()
-testRepl = useStdInSuchThat $ repl initState entry
+testRepl = repl initState entry
 
---testAuto :: IO ()
---testAuto = do
---    ref <- newIORef ""
---    useIORefSuchThat ref $ void $ batchStep initState entry testcase
+testAuto :: IO ()
+testAuto = void $ batchStep initState entry testcase
 
 main :: IO ()
-main = testRepl
---main = testAuto
+--main = testRepl
+main = testAuto
 

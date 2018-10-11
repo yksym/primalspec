@@ -1,14 +1,13 @@
 module PrimalSpec.Util
 ( askStdIn
-, askIORef
-, askStringIORef
 , interleave
 , void
+, constrName
 ) where
 
 import Text.Read (readMaybe)
-import Data.IORef
 import Data.List (transpose)
+import Data.Data (Data, toConstr, showConstr)
 
 
 interleave :: [a] -> [a] -> [a]
@@ -31,10 +30,6 @@ askStdIn q p = do
     putStrLn q
     ask' (readMaybe <$> getLine) q p
 
-askIORef :: (Read a) => IORef a -> String -> (a -> Bool) -> IO a
-askIORef ref = ask' $ Just <$> readIORef ref
-
-askStringIORef :: (Read a) => IORef String -> String -> (a -> Bool) -> IO a
-askStringIORef ref = ask' $ readMaybe <$> readIORef ref
-
+constrName :: (Data a) => a -> String
+constrName = showConstr . toConstr
 

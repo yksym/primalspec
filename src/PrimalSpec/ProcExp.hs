@@ -20,10 +20,10 @@ module PrimalSpec.ProcExp
 , load
 ) where
 
-import PrimalSpec.ConstrUtil
 import PrimalSpec.Util
 import Control.Applicative as A
 import Control.Monad.State
+import Control.Lens
 import Data.Data (Data)
 import Data.Monoid ((<>))
 import Data.Set as S
@@ -37,7 +37,7 @@ data ProcExp s ev
     = Stop
     | Skip
     | Prefix ev (Store s (ProcExp s ev))
-    | forall a. Recv (a -> ev) (a -> Store s (ProcExp s ev))
+    | forall a. Recv (Prism' ev a) (a -> Maybe (Store s (ProcExp s ev)))
     | ExternalChoise (ProcExp s ev) (ProcExp s ev)
     | Interrupt (ProcExp s ev) (ProcExp s ev)
     | RetInterrupt (ProcExp s ev) (ProcExp s ev)
@@ -46,12 +46,13 @@ data ProcExp s ev
     | Interleave (ProcExp s ev) (ProcExp s ev)
     | Load (s -> ProcExp s ev)
 
+
 instance forall ev s. (Show ev, Data ev) => Show (ProcExp s ev) where
     show = go [] where
         go bs Skip                   = indent bs <> "Skip" <> endl
         go bs Stop                   = indent bs <> "Stop" <> endl
         go bs (Prefix ev _)          = indent bs <> show ev <> " -> ..." <> endl
-        go bs (Recv evc _)           = indent bs <> constrNameOf evc <> "?x -> ..." <> endl
+        go bs (Recv evc _)           = indent bs <> constrName (undefined ^. re evc) <> "?x -> ..." <> endl
         go bs (ExternalChoise p1 p2) = indent bs <> "|=|"  <> endl <> go (bs++[True]) p1 <> go (bs++[False]) p2
         go bs (Interrupt p1 p2)      = indent bs <> "<|>"  <> endl <> go (bs++[True]) p1 <> go (bs++[False]) p2
         go bs (RetInterrupt p1 p2)   = indent bs <> "<@>"  <> endl <> go (bs++[True]) p1 <> go (bs++[False]) p2
@@ -68,7 +69,7 @@ instance forall ev s. (Show ev, Data ev) => Show (ProcExp s ev) where
 (-->) :: ev -> Store s (ProcExp s ev) -> ProcExp s ev
 (-->) = Prefix
 
-(?->) :: (a -> ev) -> (a -> Store s (ProcExp s ev)) -> ProcExp s ev
+(?->) :: Prism' ev a -> (a -> Maybe (Store s (ProcExp s ev))) -> ProcExp s ev
 (?->) = Recv
 
 -- guard
@@ -173,9 +174,11 @@ tryStep _ Skip _ = Nothing
 tryStep _ Stop _ = Nothing
 tryStep _ (Prefix ev1 (Store m p)) ev2 | ev1 == ev2 = Just $ m >> return p
                                      | otherwise = Nothing
-tryStep _ (Recv ev1c p) ev2 = case p <$> argOf ev2 ev1c of
-    Just (Store m p') -> Just $ m >> return p'
-    Nothing -> Nothing
+tryStep _ (Recv evc p) ev =
+    do
+        a <- ev ^? evc
+        (Store m p') <- p a
+        return $ m >> return p'
 tryStep s (ExternalChoise p1 p2) ev
     | isJust p1' && isJust p2' = error "ExternalChoise for same event!!" -- how does monad transfer treat this without s ??
     | otherwise  = p1' A.<|> p2'
