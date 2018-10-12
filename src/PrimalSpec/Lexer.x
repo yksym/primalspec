@@ -38,7 +38,8 @@ import Data.Maybe(fromMaybe)
 tokens :-
   $white+                               ;
   "--".*                                ;
-  [\%] import                           { tok          TokenImport }
+  [\%] header                           { tok          TokenHeader }
+  [\%] footer                           { tok          TokenFooter }
   [\%] entry                            { tok          TokenEntry }
   [\%] state                            { tok          TokenStateType }
   [\%] initstate                        { tok          TokenInitState }
@@ -63,7 +64,7 @@ tokens :-
   [\)]                                  { tok          TokenCB }
   [1-9] [0-9]*                          { tok_read     TokenInt }
   [a-zA-Z] [a-z A-Z 0-9 \_ \']*         { tok_string   TokenId }
-  [\{][^\}]*[\}]                        { tok_string   TokenTargetExp }
+  [\{]$white*[^\}]*$white*[\}]                        { tok_string   TokenTargetExp }
 
 
 {
@@ -79,7 +80,8 @@ tok_read x = tok' (\s -> x (read (B.unpack s)))
 
 
 data TokenClass
- = TokenImport
+ = TokenHeader
+ | TokenFooter
  | TokenDirectiveSplitter
  | TokenProcArgSplitter
  | TokenEventArgSplitter

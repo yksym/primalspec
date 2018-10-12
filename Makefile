@@ -3,7 +3,7 @@ all:
 	stack build --pedantic
 
 run:
-	stack exec primalspec-exe
+	stack exec primalspec-exe < sample/vm.prsp
 
 test:
 	stack build --test

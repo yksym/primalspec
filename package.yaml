@@ -26,6 +26,20 @@ dependencies:
 - bytestring
 - array
 - mtl
+- ghc
+- haskell-tools-rewrite
+- haskell-tools-prettyprint
+- haskell-tools-ast
+- haskell-tools-backend-ghc
+- haskell-tools-refactor
+- ghc-paths
+- references
+- filepath
+- directory
+- either
+- split
+- template-haskell
+
 
 default-extensions:
 - GADTs

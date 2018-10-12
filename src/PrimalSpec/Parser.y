@@ -1,6 +1,7 @@
 {
 module PrimalSpec.Parser
 ( prspParser
+, Program(..)
 )
 where
 
@@ -15,7 +16,8 @@ import PrimalSpec.Lexer -- (AlexPosn, Token(..), TokenClass(..), lexer, tokenToP
 %lexer { lexer } { Token _ TokenEOF }
 
 %token
-        '%import'       { Token _ TokenImport   }
+        '%header'       { Token _ TokenHeader   }
+        '%footer'       { Token _ TokenFooter   }
         '%entry'        { Token _ TokenEntry    }
         '%state'        { Token _ TokenStateType}
         '%initstate'    { Token _ TokenInitState}
@@ -49,21 +51,24 @@ import PrimalSpec.Lexer -- (AlexPosn, Token(..), TokenClass(..), lexer, tokenToP
 %%
 
 Program :: {Program}
-    : ImportStmt EventStmt StateStmt InitStateStmt EntryStmt '%%' StmtList  { Program $1 $2 $3 $4 $5 $7}
+    : Header EventTypePragma StateTypePragma InitStatePragma EntryPragma '%%' StmtList '%%' Footer { Program $1 $2 $3 $4 $5 $7 $9 }
 
-ImportStmt :: {String}
-    : '%import' texp { $2 }
+Header :: {String}
+    : '%header' texp { $2 }
 
-EntryStmt :: { Proc }
+Footer :: {String}
+    : '%footer' texp { $2 }
+
+EntryPragma :: { Proc }
     : '%entry' Proc { $2 }
 
-StateStmt :: {String}
+StateTypePragma :: {String}
     : '%state' texp { $2 }
 
-InitStateStmt :: {String}
+InitStatePragma :: {String}
     : '%initstate' texp { $2 }
 
-EventStmt :: {String}
+EventTypePragma :: {String}
     : '%event' texp { $2 }
 
 StmtList :: { [Stmt] }
@@ -122,7 +127,15 @@ EventArg : '.' id            { EAId  $2 }
 
 type Condition = String
 
-data Program = Program String String String String Proc [Stmt]
+data Program = Program {
+    _header    :: String
+  , _eventType :: String
+  , _stateType :: String
+  , _initState :: String
+  , _entryProc :: Proc
+  , _stmts     :: [Stmt]
+  , _footer    :: String
+  }
     deriving (Show, Eq)
 
 data Stmt
