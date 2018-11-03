@@ -4,19 +4,17 @@ datatype Global {
   , numJuice :: Int
 }
 
-initState = Global.1.2
-
 channel drink
 channel coin
 channel juice
 channel fill : Int
 
-ENTRY = SERVICE
+ENTRY = save.(Global.1.2) -> SERVICE
 
 SERVICE = load?g -> (
        (g^.numJuice >= 0) & fill?n -> save.(g { numJuice = g^.numJuice + n, numCoin = 5 }) -> SERVICE
     [] (g^.numJuice  > 0) & coin -> juice -> save.(g { numJuice = g^.numJuice - 1, numCoin = g^.numCoin + 1 }) -> SERVICE
     )
 
-assert save.initState -> ENTRY [T= coin -> juice -> coin -> juice -> fill.3 -> coin -> juice -> SKIP
+assert ENTRY [T= coin -> juice -> coin -> juice -> fill.3 -> coin -> juice -> SKIP
 
