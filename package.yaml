@@ -23,7 +23,11 @@ dependencies:
 - lens
 - reflection
 - containers
+- bytestring
+- array
 - mtl
+- transformers
+
 
 default-extensions:
 - GADTs
@@ -40,23 +44,16 @@ library:
   source-dirs: src
 
 executables:
-  primalspec-exe:
+  prsp:
     main:                Main.hs
-    source-dirs:         demo
+    source-dirs:         app
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
     - primalspec
+    build-tools:
+    - happy
+    - alex
 
-tests:
-  primalspec-test:
-    main:                Spec.hs
-    source-dirs:         test
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - primalspec

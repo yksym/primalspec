@@ -3,15 +3,12 @@ all:
 	stack build --pedantic
 
 run:
-	stack exec primalspec-exe
+	stack exec prsp sample/vm.csp
 
 test:
-	stack build --test
+	stack exec prsp sample/test.csp
 
-doc:
-	stack haddock
-
-hlint:
+lint:
 	hlint .
 
-.PHONY: all run test example doc
+.PHONY: all run lint

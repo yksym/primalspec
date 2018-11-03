@@ -1,0 +1,82 @@
+datatype T = A.Int | B.Bool | C | D.Bool.T | F.U.Int
+datatype U = U.Int
+
+datatype Global {
+    tmp :: Int
+  , dummy :: U
+}
+
+channel foo : T
+channel ints : Int.Int
+channel int : Int
+channel done
+
+P = ints?x?y -> x == 2 & SKIP
+
+Q(n,k) = ints.2.n -> Q(n-1, k)
+Q(0,k) = k
+
+P1 = foo -> ints?n?k:{k|k<-Int, k < 3} -> SKIP
+
+FACT(0) = int.1 -> load?(Global.x.(U.y)) -> (x == 6 and y == 0) & done -> SKIP
+FACT(n) = (n > 0) & int.n -> load?g -> save.(g { tmp = g^.tmp * n, dummy = U.0 }) -> FACT(n-1)
+
+g0(r) = r^.tmp
+g1(r, m) = r { tmp = m }
+g2 = Global.1.(U.3)
+
+fTInt :: (T) -> Int
+fTInt(_) = 3
+
+varT1 = A.1
+
+varT2 :: T
+varT2 = F.(U.3).2
+
+--f0 :: (T) -> Int
+f0(A.n) = n
+f0(B.b) = if b then 1 else 0
+f0(C)   = 0
+f0(D.b.t) = if b then f0(t) else 0
+
+--var1 :: Int
+var1 = 1
+
+--var2 :: Int
+var2 = 1 + 3 - 4 * 5 + (5 / 2) * (4 % 3)
+
+--var3 :: Int
+var3 = let x = 1 + 3 within if x == 4 then 3 + 8 else 4 - 3
+
+--f1 :: (Int) -> Int
+f1 (x) = x + 1
+
+--f2 :: (Int, Int) -> Int
+f2 (x, y) = x + y
+
+--f3 :: (Int, Int) -> Int
+f3 = \x, y @ x + y
+
+--f4 :: (Bool, Int) -> Int
+f4 (b, n) = if b then (let g0 = (\x, y @ x + y) within g0(n, n+1)) else 3
+
+--f5 :: (Int) -> Int
+f5(0) = 1
+f5(n) = n * f5(n-1)
+
+assert var1 == 1
+assert var2 != -12
+assert var3 == 11
+assert f1(1) == 2
+assert f2(1,2) == 3
+assert f3(1,2) == 3
+assert f5(4) == 24
+assert f0(C) == 0
+assert f0(D.true.C) == 0
+assert f0(D.true.(A.3)) == 3
+
+assert g0(g2) + 1 == g0(g1(g2, 2))
+
+assert (save.(Global.1.(U.3)) -> FACT(3)) [T= (int.3 -> int.2 -> int.1 -> int.1 -> done -> SKIP)
+assert (save.(Global.2.(U.3)) -> FACT(3)) [T= (int.3 -> int.2 -> int.1 -> int.1 -> SKIP)
+
