@@ -4,6 +4,7 @@ module PrimalSpec
   , runParser
   , checkAllAssert
   , module PrimalSpec.Type
+  , module PrimalSpec.Util
   ) where
 
 import PrimalSpec.Lexer
@@ -11,6 +12,7 @@ import PrimalSpec.Parser
 import PrimalSpec.Eval
 import PrimalSpec.Judge
 import PrimalSpec.Type
+import PrimalSpec.Util
 import Control.Lens
 import qualified Data.ByteString.Lazy.Char8 as B
 import Control.Monad(forM, forM_, when, unless)

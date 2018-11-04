@@ -53,6 +53,7 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - primalspec
+    - optparse-generic
     build-tools:
     - happy
     - alex

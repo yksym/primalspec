@@ -1,24 +1,22 @@
+{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import PrimalSpec
 --import Control.Lens
-import System.Environment (getArgs)
+--import Control.Monad.IO.Class
+import Options.Generic
+import Data.Maybe (fromMaybe)
 
+data OptArgs = OptArgs String (Maybe Int) deriving (Generic, Show)
 
+instance ParseRecord OptArgs
 
 main :: IO ()
 main = do
-    args <- getArgs
-    s <- readFile $ head args
+    (OptArgs filepath logLv) <- getRecord "Test program"
+    s <- readFile filepath
+    setLogLevel $ toEnum $ fromMaybe 0 logLv
     case runParser s of
-        Right p -> do
-            --sequence_ $ print <$> (p ^. tyCtx)
-            --sequence_ $ print <$> (p ^. vCtx)
-            putStrLn $ checkAllAssert p
+        Right p -> putStrLn $ checkAllAssert p
         Left s' -> print s'
-
-
-
-
-

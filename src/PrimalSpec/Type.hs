@@ -6,7 +6,7 @@ module PrimalSpec.Type
   ) where
 
 import Data.List(groupBy, delete, elemIndex, lookup)
---import Data.Monoid((<>))
+--import Data.Monoid((++))
 import Control.Lens
 import Control.Monad.Except(throwError, MonadError)
 
@@ -38,11 +38,11 @@ data Accessor = Accessor Loc String deriving (Eq, Show)
 data Action = Action Loc [Accessor] Expr deriving (Eq, Show)
 
 data EEvent = EEvent Loc String [Payload]
-    deriving (Eq, Show)
+    deriving (Eq)
 
 
---instance Show EEvent where
---    show (EEvent l c _) = c <> "...(" <> l <> ")"
+instance Show EEvent where
+    show (EEvent l c _) = c ++ "(" ++ l ++ ")"
 
 -- channel constructor :: T -> TyEvent
 data Type
@@ -187,21 +187,21 @@ data VProc
     | VSkip
     | VStop
     -- | VChaos
-    deriving (Eq,Show)
+    deriving (Eq)
 
---instance Show VProc where
---    show = go [] where
---        go bs (VPrefix ev _)               = indent bs <> show ev <> " -> ..." <> endl
---        go bs (VSequence  (_, p1) (_, p2)) = indent bs <> ";"  <> endl <> go (bs++[True]) p1 <> go (bs++[False]) p2
---        go bs (VInterrupt (_, p1) (_, p2)) = indent bs <> "/\\" <> endl  <> go (bs++[True]) p1 <> go (bs++[False]) p2
---        go bs (VEChoise   (_,p1) (_,p2))   = indent bs <> "[]"  <> endl <> go (bs++[True]) p1 <> go (bs++[False]) p2
---        go bs VSkip                      = indent bs <> "SKIP" <> endl
---        go bs VStop                      = indent bs <> "STOP" <> endl
---        indent [] = "--* "
---        indent [True] = "  |----* "
---        indent [False] = "  `----* "
---        indent (b:bs) = (if b then "  |  " else "     ") <> indent bs
---        endl = "\n"
+instance Show VProc where
+    show = go [] where
+        go bs (VPrefix ev _)               = indent bs ++ show ev ++ " -> ..." ++ endl
+        go bs (VSequence  (_, p1) (_, p2)) = indent bs ++ ";"  ++ endl ++ go (bs++[True]) p1 ++ go (bs++[False]) p2
+        go bs (VInterrupt (_, p1) (_, p2)) = indent bs ++ "/\\" ++ endl  ++ go (bs++[True]) p1 ++ go (bs++[False]) p2
+        go bs (VEChoise   (_,p1) (_,p2))   = indent bs ++ "[]"  ++ endl ++ go (bs++[True]) p1 ++ go (bs++[False]) p2
+        go bs VSkip                      = indent bs ++ "SKIP" ++ endl
+        go bs VStop                      = indent bs ++ "STOP" ++ endl
+        indent [] = "--* "
+        indent [True] = "  |----* "
+        indent [False] = "  `----* "
+        indent (b:bs) = (if b then "  |  " else "     ") ++ indent bs
+        endl = "\n"
 
 data Value
     = VBool Bool

@@ -8,6 +8,7 @@ module PrimalSpec.Eval
   ) where
 
 import PrimalSpec.Type
+import PrimalSpec.Util
 import Data.Maybe (isJust)
 import Control.Lens hiding (op)
 import Control.Applicative ((<|>))
@@ -155,7 +156,8 @@ mkEval (ERefTrace   loc e1 e2) = do
     where
         go [] _       = return ()
         go (ev:ev1) v = do
-            --dprint $ show ev
+            dlogM EVENT_TRACE $ show ev
+            dlogM EVENT_TRACE $ show v
             mk <- trans ev v
             case mk of
                 Just k -> go ev1 k
