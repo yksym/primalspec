@@ -192,8 +192,8 @@ mkEval (EGuard     _ e1 e2 ) = do
         _ -> error "bug"
 mkEval (ESequence  _ e1 e2 ) = do
     ret1 <- tryEvalProcExpr e1
-    ret2 <- tryEvalProcExpr e2
-    return $ VProc $ VSequence ret1 ret2
+    cur <- use vctx
+    return $ VProc $ VSequence ret1 (cur, e2)
 mkEval (EInterrupt _ e1 e2 ) = do
     ret1 <- tryEvalProcExpr e1
     ret2 <- tryEvalProcExpr e2
@@ -306,16 +306,17 @@ trans' ev (VEChoise  (ctx1, v1) (ctx2, v2)) = do
        | isJust v2'               -> return v2'
        | otherwise                -> return Nothing
 
-trans' ev (VSequence (ctx1, v1) (ctx2, v2))      = do
+trans' ev (VSequence (ctx1, v1) (ctx2, e))      = do
     case v1 of
         VSkip -> do
             vctx .= ctx2
+            (VProc v2) <- mkEval e
             trans' ev v2
         _ -> do
             vctx .= ctx1
             mv1' <- trans' ev v1
             new1 <- use vctx
-            return $ mv1' >>= \v -> return $ VSequence (new1, v) (ctx2, v2)
+            return $ mv1' >>= \v -> return $ VSequence (new1, v) (ctx2, e)
 
 trans' ev (VInterrupt (ctx1, v1) (ctx2, v2))      = do
     vctx .= ctx1

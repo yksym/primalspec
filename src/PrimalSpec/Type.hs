@@ -10,7 +10,7 @@ import Data.List(groupBy, delete, elemIndex, lookup)
 import Control.Lens
 import Control.Monad.Except(throwError, MonadError)
 
-type Loc = String
+type Loc = String -- TODO: Loc filepath line col
 
 class ShowLoc a where
     showLoc :: a -> Loc
@@ -181,7 +181,7 @@ type VCtx  = Ctx Value
 
 data VProc
     = VPrefix    EEvent Expr
-    | VSequence  (VCtx, VProc) (VCtx, VProc)
+    | VSequence  (VCtx, VProc) (VCtx, Expr)
     | VInterrupt (VCtx, VProc) (VCtx, VProc)
     | VEChoise   (VCtx, VProc) (VCtx, VProc)
     | VSkip
@@ -192,7 +192,7 @@ data VProc
 instance Show VProc where
     show = go [] where
         go bs (VPrefix ev _)               = indent bs ++ show ev ++ " -> ..." ++ endl
-        go bs (VSequence  (_, p1) (_, p2)) = indent bs ++ ";"  ++ endl ++ go (bs++[True]) p1 ++ go (bs++[False]) p2
+        go bs (VSequence  (_, p1) (_, _)) = indent bs ++ ";"  ++ endl ++ go (bs++[True]) p1 ++ (indent (bs++[False]) ++ "...")
         go bs (VInterrupt (_, p1) (_, p2)) = indent bs ++ "/\\" ++ endl  ++ go (bs++[True]) p1 ++ go (bs++[False]) p2
         go bs (VEChoise   (_,p1) (_,p2))   = indent bs ++ "[]"  ++ endl ++ go (bs++[True]) p1 ++ go (bs++[False]) p2
         go bs VSkip                      = indent bs ++ "SKIP" ++ endl
@@ -209,7 +209,7 @@ data Value
     | VClosure [Pattern] [(String, Value)] Expr
     | VFun [([Pattern], Expr)]
     | VThunk Expr
-    | VConstr String [Value]
+    | VConstr String [Value] -- TODO VRecord
     | VAccessor Int
     | VProc VProc
     | VProcFun [([Pattern], Expr)]
