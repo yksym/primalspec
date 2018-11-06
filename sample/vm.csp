@@ -8,13 +8,20 @@ channel drink
 channel coin
 channel juice
 channel fill : Int
+channel trouble
+channel ship
+channel repair
 
-ENTRY = save.(Global.1.2) -> SERVICE
+ENTRY = save.(Global.1.2) -> ship -> (SERVICE /\ trouble -> SKIP) ; MAINTAINANCE
 
 SERVICE = load?g -> (
        (g^.numJuice >= 0) & fill?n -> save.(g { numJuice = g^.numJuice + n, numCoin = 5 }) -> SERVICE
     [] (g^.numJuice  > 0) & coin -> juice -> save.(g { numJuice = g^.numJuice - 1, numCoin = g^.numCoin + 1 }) -> SERVICE
     )
 
-assert ENTRY [T= coin -> juice -> coin -> juice -> fill.3 -> coin -> juice -> SKIP
+MAINTAINANCE = repair -> ENTRY
+
+assert ENTRY [T= ship -> coin -> juice -> coin -> juice -> fill.3 -> coin -> juice -> SKIP
+assert not (ENTRY [T= ship -> coin -> coin -> juice -> SKIP)
+assert ENTRY [T= ship -> coin -> trouble -> repair -> ship -> coin -> juice -> coin -> juice -> fill.3 -> coin -> juice -> SKIP
 

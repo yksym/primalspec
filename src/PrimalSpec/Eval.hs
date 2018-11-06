@@ -9,7 +9,7 @@ module PrimalSpec.Eval
 
 import PrimalSpec.Type
 import PrimalSpec.Util
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, fromJust)
 import Control.Lens hiding (op)
 import Control.Applicative ((<|>))
 import Control.Monad (when, foldM)
@@ -57,7 +57,7 @@ lookupVCtx k loc = do
     cnt <- use counter
     ctx <- use vctx
     counter += 1
-    when (cnt > 1000) $ throwError $ loc ++ "stack over flow"
+    when (cnt > 1000) $ error $ loc ++ "stack over flow"
     v <- lookupCtx ctx k $ loc ++ k ++ " is undefined(value)"
     v' <- case v of
         VThunk e -> mkEval e
@@ -150,18 +150,20 @@ mkEval (ERefTrace   loc e1 e2) = do
     evs <- extractEvents v2
     vctx .= old
     (VProc v1) <- mkEval e1
-    go evs v1
+    b <- go evs v1 <|> return False
     vctx .= old
-    return $ VBool True
+    return $ VBool b
     where
-        go [] _       = return ()
+        go [] _       = return True
         go (ev:ev1) v = do
             dlogM EVENT_TRACE $ show ev
             dlogM EVENT_TRACE $ show v
             mk <- trans ev v
             case mk of
                 Just k -> go ev1 k
-                Nothing -> throwError $ loc ++ "cannot trans:" ++ show ev ++ show v
+                Nothing -> do
+                    dlogM EVENT_TRACE $ loc ++ "cannot trans:" ++ show ev ++ show v
+                    throwError ""
 
 
 
@@ -172,8 +174,9 @@ mkEval (EPrefix    _ (EEvent loc "load" [PLPat _ pt]) e) = do
     --traceShowM (loc, ctx)
     mkEval e
 mkEval (EPrefix    l (EEvent _ "load" _) _) = throwError $ l ++ "invalid"
-mkEval (EPrefix    _ (EEvent _ "save" [PLExp _ ee]) e) = do
+mkEval (EPrefix    l (EEvent _ "save" [PLExp _ ee]) e) = do
     v <- mkEval ee
+    dlogM EVENT_TRACE $ "save(" ++ l ++ ") " ++ show v
     vctx %= appendElmsCtx [("*global*",v)]
     mkEval e
 mkEval (EPrefix    _ ev e) = return $ VProc $ VPrefix ev e
@@ -322,7 +325,7 @@ trans' ev (VInterrupt (ctx1, v1) (ctx2, v2))      = do
     v2' <- trans ev v2
     if
        | isJust v1' && isJust v2' -> throwError $ show ev ++ "undeterministic choise"
-       | isJust v1'               -> do { vctx .= new1; return v1'}
+       | isJust v1'               -> return $ return $ VInterrupt (new1, fromJust v1') (ctx2, v2)
        | isJust v2'               -> do { return v2'}
        | otherwise                -> return Nothing
 

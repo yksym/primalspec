@@ -80,3 +80,11 @@ assert g0(g2) + 1 == g0(g1(g2, 2))
 assert (save.(Global.1.(U.3)) -> FACT(3)) [T= (int.3 -> int.2 -> int.1 -> int.1 -> done -> SKIP)
 assert (save.(Global.2.(U.3)) -> FACT(3)) [T= (int.3 -> int.2 -> int.1 -> int.1 -> SKIP)
 
+
+channel a
+channel b
+channel c
+
+S1 = a -> c ->SKIP /\ b -> SKIP
+
+assert S1 [T= a -> b -> SKIP
