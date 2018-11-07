@@ -41,6 +41,7 @@ tokens :-
   $white+                               ;
   "--".*                                ;
   assert                                { tok          TokenAssert      }
+  global                                { tok          TokenGlobal      }
   channel                               { tok          TokenChannel     }
   datatype                              { tok          TokenDataType    }
   recordtype                            { tok          TokenRecordType    }
@@ -115,6 +116,7 @@ tok_read x = tok' (\s -> x (read (B.unpack s)))
 
 data TokenClass
  = TokenAssert
+ | TokenGlobal
  | TokenChannel
  | TokenDataType
  | TokenRecordType

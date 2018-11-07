@@ -15,6 +15,7 @@ channel foo : T
 channel ints : Int.Int
 channel int : Int
 channel done
+channel init
 
 P = ints?x?y -> x == 2 & SKIP
 
@@ -23,8 +24,8 @@ Q(0,k) = k
 
 P1 = foo -> ints?n?k:{k|k<-Int, k < 3} -> SKIP
 
-FACT(0) = int.1 -> load?(Global.x.(U.y).(Hoge.100)) -> (x == 6 and y == 0) & done -> SKIP
-FACT(n) = (n > 0) & int.n -> load?g -> save.(g { tmp = g^.tmp * n, dummy = U.0, hoge.xxx = 100 }) -> FACT(n-1)
+FACT(0) = int.1 -> let Global.x.(U.y).(Hoge.100) = global within (x == 6 and y == 0) & done -> SKIP
+FACT(n) = (n > 0) & int.n @(global { tmp = global^.tmp * n, dummy = U.0, hoge.xxx = 100 }) -> FACT(n-1)
 
 g0(r) = r^.tmp
 g1(r, m) = r { tmp = m }
@@ -82,8 +83,8 @@ assert f0(D.true.(A.3)) == 3
 
 assert g0(g2) + 1 == g0(g1(g2, 2))
 
-assert (save.(Global.1.(U.3).(Hoge.3)) -> FACT(3)) [T= (int.3 -> int.2 -> int.1 -> int.1 -> done -> SKIP)
-assert (save.(Global.2.(U.3).(Hoge.3)) -> FACT(3)) [T= (int.3 -> int.2 -> int.1 -> int.1 -> SKIP)
+assert init@(Global.1.(U.3).(Hoge.3)) -> FACT(3) [T= (init -> int.3 -> int.2 -> int.1 -> int.1 -> done -> SKIP)
+assert init@(Global.2.(U.3).(Hoge.3)) -> FACT(3) [T= (init -> int.3 -> int.2 -> int.1 -> int.1 -> SKIP)
 
 
 channel a

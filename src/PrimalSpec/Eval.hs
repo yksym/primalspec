@@ -79,6 +79,7 @@ tryEvalProcExpr e = do
 mkEval :: Expr -> EvalM Value
 mkEval (EInt           _   v )     = return $ VInt v
 mkEval (EBool          _   v )     = return $ VBool v
+mkEval (EVar           loc v@"global" )  = lookupVCtx v loc <|> error "global should be set"
 mkEval (EVar           loc v )     = lookupVCtx v loc
 mkEval (EId            loc v )     = lookupVCtx v loc <|>  return (VConstr v [])
 mkEval (EConstr        _   c as)   = do
@@ -165,21 +166,8 @@ mkEval (ERefTrace   loc e1 e2) = do
                     dlogM EVENT_TRACE $ loc ++ "cannot trans:" ++ show ev ++ show v
                     throwError ""
 
-
-
-mkEval (EPrefix    _ (EEvent loc "load" [PLPat _ pt]) e) = do
-    v <- lookupVCtx "*global*" loc
-    ctx <- match loc (pt, v)
-    vctx %= appendElmsCtx ctx
-    --traceShowM (loc, ctx)
-    mkEval e
-mkEval (EPrefix    l (EEvent _ "load" _) _) = throwError $ l ++ "invalid"
-mkEval (EPrefix    l (EEvent _ "save" [PLExp _ ee]) e) = do
-    v <- mkEval ee
-    dlogM EVENT_TRACE $ "save(" ++ l ++ ") " ++ show v
-    vctx %= appendElmsCtx [("*global*",v)]
-    mkEval e
-mkEval (EPrefix    _ ev e) = return $ VProc $ VPrefix ev e
+mkEval (EPrefix    _ ev e me) = do
+    return $ VProc $ VPrefix ev e me
 mkEval (EEChoise   _ e1 e2) = do
     ret1 <- tryEvalProcExpr e1
     ret2 <- tryEvalProcExpr e2
@@ -285,12 +273,20 @@ trans :: VEvent -> VProc -> EvalM (Maybe VProc)
 trans = trans'
 
 trans' :: VEvent -> VProc -> EvalM (Maybe VProc)
-trans' ev (VPrefix  eev e) = do
+trans' ev (VPrefix  eev e me) = do
     mctx <- matchEvent (eev, ev)
     case mctx of
         Nothing  -> return Nothing
         Just ctx -> do
             vctx %= appendElmsCtx ctx
+            cur <- use vctx
+            case me of
+                Just e' -> do
+                    g <- mkEval e'
+                    vctx .= cur
+                    dlogM EVENT_TRACE $ "save(" ++ show e' ++ ") " ++ show g
+                    vctx %= appendElmsCtx [("global", g)] -- update is better
+                _ -> return ()
             (VProc v) <- mkEval e
             return $ Just v
 
@@ -344,7 +340,7 @@ evalEvent (EEvent _ c pls) = do
 
 extractEvents :: VProc -> EvalM [VEvent]
 extractEvents VSkip = return []
-extractEvents (VPrefix ee e) = do
+extractEvents (VPrefix ee e _) = do
     ev <- evalEvent ee
     VProc e' <- mkEval e
     evs <- extractEvents e'

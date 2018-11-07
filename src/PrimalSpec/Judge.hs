@@ -312,11 +312,14 @@ mkJudge t@(TyVar _) (EAbst         loc pts e ) = do
 mkJudge (TyVar nm) e = throwError $  showLoc e ++ "TyVar" ++ show nm ++ "is unresolved"
 mkJudge (TyConstr _ _) e = throwError $ showLoc e ++ "type should be constructor"
 
-mkJudge TyProc (EPrefix    _ (EEvent loc c as) pe) = do
+mkJudge TyProc (EPrefix    _ (EEvent loc c as) pe me) = do
     TyConstr targs _ <- lookupTyCtx c loc
     news <- forM (zip as targs) $ \(a, targ) -> do
         mkJudgePayloads loc targ a
     tyctx %= (appendElmsCtx $ concat news)
+    case me of
+        Just e -> mkJudge' (TyData "Global") e
+        _ -> return ()
     mkJudge' TyProc pe
     tyctx %= (deleteElmsCtx $ concat news)
 
@@ -336,8 +339,6 @@ mkJudge TyProc e = throwError $ showLoc e ++ "type should be Proc"
 
 
 predefinedType :: TyCtx
-predefinedType = [ ("SKIP", TyProc) , ("STOP", TyProc) ]
-    ++ channelType "load" [TyData "Global"]
-    ++ channelType "save" [TyData "Global"]
+predefinedType = [ ("SKIP", TyProc) , ("STOP", TyProc), ("global", TyData "Global") ]
 
 

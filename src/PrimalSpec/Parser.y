@@ -19,6 +19,7 @@ import PrimalSpec.Type
 
 %token
   assert                                { Token _    TokenAssert      }
+  global                                { Token _    TokenGlobal      }
   channel                               { Token _    TokenChannel     }
   datatype                              { Token _    TokenDataType    }
   recordtype                            { Token _    TokenRecordType  }
@@ -159,6 +160,7 @@ Literal :: {Expr}
 : int                             { EInt       (tokenToLoc $1) (tokenToInt $1)    }
 | true                            { EBool      (tokenToLoc $1) True  }
 | false                           { EBool      (tokenToLoc $1) False }
+| global                          { EVar       (tokenToLoc $1) "global"  }
 | id                              { EVar       (tokenToLoc $1) (tokenToString $1)  }
 | Id                              { EId        (tokenToLoc $1) (tokenToString $1)}
 
@@ -190,7 +192,8 @@ Expr :: {Expr}
 | let Pattern '=' Expr within Expr{ ELet       (tokenToLoc $1) $2 $4 $6 }
 | if Expr then Expr else Expr     { EIf        (tokenToLoc $1) $2 $4 $6 }
 | Expr '[T=' Expr                 { ERefTrace  (tokenToLoc $2) $1 $3 }
-| Event '->' Expr                 { EPrefix    (tokenToLoc $2) $1 $3                 }
+| Event '->' Expr                 { EPrefix    (tokenToLoc $2) $1 $3 Nothing     }
+| Event '@' '(' Expr ')' '->' Expr      { EPrefix    (tokenToLoc $6) $1 $7 (Just $4)   }
 | Expr '&' Expr                   { EGuard     (tokenToLoc $2) $1 $3                 }
 | Expr '[]' Expr                  { EEChoise   (tokenToLoc $2) $1 $3                 }
 | Expr ';' Expr                   { ESequence  (tokenToLoc $2) $1 $3                 }

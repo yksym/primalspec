@@ -12,12 +12,11 @@ channel trouble
 channel ship
 channel repair
 
-ENTRY = save.(Global.1.2) -> ship -> (SERVICE /\ trouble -> repair -> SKIP) ; ENTRY
+ENTRY = ship @( Global.1.2) -> (SERVICE /\ trouble -> repair -> SKIP) ; ENTRY
 
-SERVICE = load?g -> (
-       (g^.numJuice >= 0) & fill?n -> save.(g { numJuice = g^.numJuice + n, numCoin = 5 }) -> SERVICE
-    [] (g^.numJuice  > 0) & coin -> juice -> save.(g { numJuice = g^.numJuice - 1, numCoin = g^.numCoin + 1 }) -> SERVICE
-    )
+SERVICE =
+       (global^.numJuice >= 0) & fill?n @( global { numJuice = global^.numJuice + n, numCoin = 5 }) -> SERVICE
+    [] (global^.numJuice  > 0) & coin -> juice @(global { numJuice = global^.numJuice - 1, numCoin = global^.numCoin + 1 }) -> SERVICE
 
 assert ENTRY [T= ship -> coin -> juice -> coin -> juice -> fill.3 -> coin -> juice -> SKIP
 assert not (ENTRY [T= ship -> coin -> coin -> juice -> SKIP)

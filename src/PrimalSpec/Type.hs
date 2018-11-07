@@ -101,7 +101,7 @@ data Expr
     | ERefTrace Loc Expr Expr
     | EActionUpdate Loc Expr [Action]
     | EFieldAccess Loc Expr [Accessor]
-    | EPrefix    Loc EEvent Expr
+    | EPrefix    Loc EEvent Expr (Maybe Expr)
     | EGuard     Loc Expr Expr
     | EEChoise   Loc Expr Expr
     | ESequence  Loc Expr Expr
@@ -141,7 +141,7 @@ instance ShowLoc Expr where
     showLoc ( ERefTrace  loc _ _  ) = loc
     showLoc ( EActionUpdate loc _ _) = loc
     showLoc ( EFieldAccess loc _ _) = loc
-    showLoc ( EPrefix    loc _ _  ) = loc
+    showLoc ( EPrefix    loc _ _   _) = loc
     showLoc ( EEChoise   loc _ _  ) = loc
     showLoc ( EGuard     loc _ _  ) = loc
     showLoc ( ESequence  loc _ _  ) = loc
@@ -180,7 +180,7 @@ updateCtx k old new ctx = do
 type VCtx  = Ctx Value
 
 data VProc
-    = VPrefix    EEvent Expr
+    = VPrefix    EEvent Expr (Maybe Expr)
     | VSequence  (VCtx, VProc) (VCtx, Expr)
     | VInterrupt (VCtx, VProc) (VCtx, VProc)
     | VEChoise   (VCtx, VProc) (VCtx, VProc)
@@ -191,7 +191,7 @@ data VProc
 
 instance Show VProc where
     show = go [] where
-        go bs (VPrefix ev _)               = indent bs ++ show ev ++ " -> ..." ++ endl
+        go bs (VPrefix ev _ _)               = indent bs ++ show ev ++ " -> ..." ++ endl
         go bs (VSequence  (_, p1) (_, _)) = indent bs ++ ";"  ++ endl ++ go (bs++[True]) p1 ++ (indent (bs++[False]) ++ "...")
         go bs (VInterrupt (_, p1) (_, p2)) = indent bs ++ "/\\" ++ endl  ++ go (bs++[True]) p1 ++ go (bs++[False]) p2
         go bs (VEChoise   (_,p1) (_,p2))   = indent bs ++ "[]"  ++ endl ++ go (bs++[True]) p1 ++ go (bs++[False]) p2
