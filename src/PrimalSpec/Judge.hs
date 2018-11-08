@@ -10,6 +10,7 @@ module PrimalSpec.Judge
   ) where
 
 import PrimalSpec.Type
+import PrimalSpec.Util
 import Data.Set (Set, empty, insert, elems)
 import Data.Maybe (fromMaybe)
 import Control.Lens
@@ -182,8 +183,9 @@ squashType as = do
 
 
 mkJudge' :: Type -> Expr -> JudgeM ()
-mkJudge' = mkJudge
---mkJudge' t e = traceShow (t, e) $ mkJudge t e
+mkJudge' t e = do
+    dlogM JUDGE $ show (t, e)
+    mkJudge t e
 
 mkJudge :: Type -> Expr -> JudgeM ()
 mkJudge t      (EVar          loc v   ) = lookupTyCtx v loc >>= addEq loc t
@@ -195,12 +197,15 @@ mkJudge t      (EId           loc v   ) = do
             addEq loc t tret
         _ -> throwError $ loc ++ v ++ " should be a data constructor or a proc"
 mkJudge t      (EConstr       loc c as) = do
+    dlogM JUDGE c
     ct <- lookupTyCtx c loc
+    dlogM JUDGE $ show ct
     case ct of
         TyConstr targs tret -> do
             addEq loc t tret
+            when (length as /= length targs) $ throwError $ loc ++ c ++ " doesn't match num of args"
             forM_ (zip as targs) $ \(a, targ) -> do
-                mkJudge targ a
+                mkJudge' targ a
         _ -> throwError $ loc ++ c ++ " is not a data constructor"
 mkJudge t      (EProcRef       loc c as) = do
     ct <- lookupTyCtx c loc
@@ -208,8 +213,9 @@ mkJudge t      (EProcRef       loc c as) = do
         TyProc -> addEq loc t TyProc
         TyFun targs tret -> do
             addEq loc t tret
+            when (length as /= length targs) $ throwError $ loc ++ c ++ " doesn't match num of args"
             forM_ (zip as targs) $ \(a, targ) -> do
-                mkJudge targ a
+                mkJudge' targ a
         _ -> throwError $ loc ++ c ++ " is not a proc"
 mkJudge t      (EParenthesis _ e ) = mkJudge' t e
 mkJudge t      (EApply        _   f as) = do
@@ -229,15 +235,15 @@ mkJudge t      (EIf           _   c e1 e2)  = mkJudge' TyBool c >> mkJudge' t   
 
 mkJudge t      (EFieldAccess  loc   e accs)   = do
     (recType, targetType) <- squashType accs
-    mkJudge recType e
+    mkJudge' recType e
     addEq loc t targetType
 
 mkJudge t (EActionUpdate _ e acts)   = do
-    mkJudge t e
+    mkJudge' t e
     forM_ acts $ \(Action l accs e') -> do
         (recType, targetType) <- squashType accs
         addEq l t recType
-        mkJudge targetType e'
+        mkJudge' targetType e'
 mkJudge (TyData tnm) e = throwError $ showLoc e ++ "type should be " ++ tnm
 mkJudge TyEvent  e = throwError  $ showLoc e ++ "type should be Event"
 
@@ -260,8 +266,14 @@ mkJudge TyBool (ELT           _ l r   ) = mkJudge' TyInt  l  >> mkJudge' TyInt  
 mkJudge TyBool (EGT           _ l r   ) = mkJudge' TyInt  l  >> mkJudge' TyInt  r
 mkJudge TyBool (ELE           _ l r   ) = mkJudge' TyInt  l  >> mkJudge' TyInt  r
 mkJudge TyBool (EGE           _ l r   ) = mkJudge' TyInt  l  >> mkJudge' TyInt  r
-mkJudge TyBool (EEQ           _ l r   ) = mkJudge' TyInt  l  >> mkJudge' TyInt  r
-mkJudge TyBool (ENE           _ l r   ) = mkJudge' TyInt  l  >> mkJudge' TyInt  r
+mkJudge TyBool (EEQ           _ l r   ) = do
+    v <- newTyVar
+    mkJudge v l
+    mkJudge v r
+mkJudge TyBool (ENE           _ l r   ) = do
+    v <- newTyVar
+    mkJudge v l
+    mkJudge v r
 mkJudge TyBool (EUnNot        _ e     ) = mkJudge' TyBool e
 mkJudge TyBool (ERefTrace _ pe1 pe2)    = do
     mkJudge' TyProc pe1
@@ -314,6 +326,7 @@ mkJudge (TyConstr _ _) e = throwError $ showLoc e ++ "type should be constructor
 
 mkJudge TyProc (EPrefix    _ (EEvent loc c as) pe me) = do
     TyConstr targs _ <- lookupTyCtx c loc
+    when (length as /= length targs) $ throwError $ loc ++ c ++ " doesn't match num of args"
     news <- forM (zip as targs) $ \(a, targ) -> do
         mkJudgePayloads loc targ a
     tyctx %= (appendElmsCtx $ concat news)

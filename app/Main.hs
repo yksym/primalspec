@@ -19,6 +19,5 @@ main = do
     setLogLevel l
     case runParser s of
         Right p -> do
-            dlogM DEBUG $ show p
             putStrLn $ checkAllAssert p
         Left s' -> print s'

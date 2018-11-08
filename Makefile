@@ -11,4 +11,7 @@ test:
 lint:
 	hlint .
 
+install:
+	stack install
+
 .PHONY: all run lint

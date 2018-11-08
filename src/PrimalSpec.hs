@@ -89,7 +89,9 @@ runParser s = do
     stmts <- runAlex (B.pack s) prspParser
 
     tyctx <- typeContext stmts
+    dlogM DEBUG $ show tyctx
     vctx <- valueContext stmts
+    dlogM DEBUG $ show vctx
     pctx <- procContext stmts
     let fvctx   = [(nm, VAccessor i) | (_, _, fds)  <- stmts ^.. traverse . _SRecordTypeDecl, (i, FieldDecl _ nm _) <- zip [0..] fds]
     let asexprs = stmts ^.. traverse . _SAssert . _2

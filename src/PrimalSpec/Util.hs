@@ -11,7 +11,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import Control.Monad(when)
 import System.Environment
 
-data LogLv = NO_LOG | EVENT_TRACE | DEBUG deriving(Ord,Eq,Enum,Read,Show)
+data LogLv = NO_LOG | EVENT_TRACE | JUDGE | DEBUG deriving(Ord,Eq,Enum,Read,Show)
 
 setLogLevel :: LogLv -> IO ()
 setLogLevel lv = setEnv "DEBUG" $ show $ fromEnum lv

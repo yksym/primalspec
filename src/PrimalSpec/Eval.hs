@@ -122,8 +122,8 @@ mkEval (ELT      _ e1 e2 ) = apIntCmp (<)      (mkEval e1) (mkEval e2)
 mkEval (EGT      _ e1 e2 ) = apIntCmp (>)      (mkEval e1) (mkEval e2)
 mkEval (ELE      _ e1 e2 ) = apIntCmp (<=)     (mkEval e1) (mkEval e2)
 mkEval (EGE      _ e1 e2 ) = apIntCmp (>=)     (mkEval e1) (mkEval e2)
-mkEval (EEQ      _ e1 e2 ) = apIntCmp (==)     (mkEval e1) (mkEval e2)
-mkEval (ENE      _ e1 e2 ) = apIntCmp (/=)     (mkEval e1) (mkEval e2)
+mkEval (EEQ      _ e1 e2 ) = apCmp (==)     (mkEval e1) (mkEval e2)
+mkEval (ENE      _ e1 e2 ) = apCmp (/=)     (mkEval e1) (mkEval e2)
 mkEval (EUnMinus _ e1    ) = fmapInt  negate   (mkEval e1)
 mkEval (EUnNot   _ e1    ) = fmapBool not      (mkEval e1)
 mkEval (EIf      _ e1 e2 e3) = do
@@ -199,6 +199,12 @@ mkEval (EProcRef loc s es ) = do
             vctx %= appendElmsCtx new
             return e
 
+apCmp :: (t1 -> t2 -> Bool) -> EvalM t1 -> EvalM t2 -> EvalM Value
+apCmp op m1 m2 = do
+    v1 <- m1
+    v2 <- m2
+    return $ VBool $ op v1 v2
+
 apInt :: (Int -> Int -> Int) -> EvalM Value -> EvalM Value -> EvalM Value
 apInt op m1 m2 = do
     (VInt v1) <- m1
@@ -231,6 +237,7 @@ access :: Loc -> Value -> [Accessor] -> EvalM Value
 access _ v [] = return v
 access l v accs = do
     lns <- concatAccess l accs
+    --traceShowM (v, accs)
     return $ v ^?! lns
 
 update :: Value -> [Action] -> EvalM Value

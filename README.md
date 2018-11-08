@@ -33,3 +33,17 @@ global^.hoge == 3 & ev.4 -> ...
 ```
 ev.3 @( global {hoge = 3, huga = 4} ) -> ...
 ```
+
+
+TODO
+---
+
+* module system
+* multi-byte chars
+* Set
+* Tuple
+* record construction
+* extensible record like?
+* param poly
+
+

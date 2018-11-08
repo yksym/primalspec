@@ -140,7 +140,7 @@ TypesWithComma :: {[Type]}
 
 TypesWithPeriod :: {[Type]}
 : TypeExpr                        { [$1]    }
-| TypeExpr '.' TypesWithComma     { $1 : $3 }
+| TypeExpr '.' TypesWithPeriod     { $1 : $3 }
 
 Event :: {EEvent}
 : id                              { EEvent   (tokenToLoc $1) (tokenToString $1) [] }
