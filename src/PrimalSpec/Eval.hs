@@ -160,15 +160,24 @@ mkEval (ERefTrace   loc e1 e2) = do
     where
         go [] _       = return True
         go (ev:ev1) v = do
-            dlogM EVENT_TRACE $ "try event: " ++ show ev
-            dlogM EVENT_TRACE $ "current process" ++ show v
             g <- use global
-            dlogM EVENT_TRACE $ "current state" ++ show g
+            dlogM EVENT_TRACE $ "--------------"
+            dlogM EVENT_TRACE $ "STATE"
+            dlogM EVENT_TRACE $ "--------------"
+            dlogM EVENT_TRACE $ show g ++ "\n"
+            dlogM EVENT_TRACE $ "--------------"
+            dlogM EVENT_TRACE $ "PROCESS"
+            dlogM EVENT_TRACE $ "--------------"
+            dlogM EVENT_TRACE $ show v ++ "\n"
+            dlogM EVENT_TRACE $ "--------------"
+            dlogM EVENT_TRACE $ "TRY EVENT"
+            dlogM EVENT_TRACE $ "--------------"
+            dlogM EVENT_TRACE $ show ev ++ "\n"
             mk <- trans ev v
             case mk of
                 Just k -> go ev1 k
                 Nothing -> do
-                    dlogM EVENT_TRACE $ loc ++ "cannot trans"
+                    dlogM EVENT_TRACE $ loc ++ "cannot trans" ++ "\n"
                     throwError ""
 
 mkEval (EPrefix    _ ev e me) = do
@@ -262,21 +271,20 @@ concatAccess l (Accessor _ aname : accs) = do
 
 matchEvent :: (EEvent, VEvent) -> EvalM (Maybe VCtx)
 matchEvent (EEvent _ c pls, VEvent c' vs) = do
-    when (c == c') $ dlogM EVENT_TRACE $ "payload matching start: " ++ c
     if c == c'
-        then fmap concat . sequence <$> sequence [matchPayload (pl, v) | (pl,v) <- zip pls vs]
+        then fmap concat . sequence <$> sequence [matchPayload c (pl, v) | (pl,v) <- zip pls vs]
         else return Nothing
 
-matchPayload :: (Payload, Value) -> EvalM (Maybe VCtx)
-matchPayload (PLExp _ e, v) = do
+matchPayload :: String -> (Payload, Value) -> EvalM (Maybe VCtx)
+matchPayload c (PLExp loc e, v) = do
     v' <- mkEval e
     if v' == v then return $ Just [] else do
-            dlogM EVENT_TRACE $ "payload matching fail!"
+            dlogM EVENT_TRACE $ loc ++ c ++ " payload matching fail! "
             dlogM EVENT_TRACE $ show v
             dlogM EVENT_TRACE $ show v'
             return Nothing
-matchPayload (PLPat loc p, v) = (Just <$> match loc (p, v)) `catchError` (\_ -> return Nothing)
-matchPayload (PLElm loc s1 s2 s3 _ ePred, v) = do
+matchPayload _ (PLPat loc p, v) = (Just <$> match loc (p, v)) `catchError` (\_ -> return Nothing)
+matchPayload _ (PLElm loc s1 s2 s3 _ ePred, v) = do
     when (s1 /= s2 || s2 /= s3) $ throwError $ loc ++ "this syntax is not implemented"
     (do
         ctx <- use vctx
@@ -301,7 +309,9 @@ trans' ev (VPrefix  eev e me) = do
                 Just e' -> do
                     g <- mkEval e'
                     vctx .= cur
-                    dlogM EVENT_TRACE $ "Global Updated"
+                    dlogM EVENT_TRACE $ "=============="
+                    dlogM EVENT_TRACE $ "CHANGE Global"
+                    dlogM EVENT_TRACE $ "==============\n"
                     global .= Just g
                 _ -> return ()
             (VProc v) <- mkEval e
@@ -368,6 +378,15 @@ extractEvents (VPrefix ee e _) = do
     VProc e' <- mkEval e
     evs <- extractEvents e'
     return $ ev:evs
+extractEvents (VSequence (c1, p1) (c2, ep2)) = do
+    old <- use vctx
+    vctx .= c1
+    es1 <- extractEvents p1
+    vctx .= c2
+    VProc p2 <- mkEval ep2
+    es2 <- extractEvents p2
+    vctx .= old
+    return $ es1 ++ es2
 extractEvents _ = throwError "invalid proc expr"
 
 predefinedValue :: VCtx

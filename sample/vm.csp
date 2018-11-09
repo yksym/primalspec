@@ -11,14 +11,21 @@ channel fill : Int
 channel trouble
 channel ship
 channel repair
+channel goal
 
 ENTRY = ship @( Global.1.2) -> (SERVICE /\ trouble -> repair -> SKIP) ; ENTRY
 
 SERVICE =
        (global^.numJuice >= 0) & fill?n @( global { numJuice = global^.numJuice + n, numCoin = 5 }) -> SERVICE
     [] (global^.numJuice  > 0) & coin -> juice @(global { numJuice = global^.numJuice - 1, numCoin = global^.numCoin + 1 }) -> SERVICE
+    [] GOAL
 
-assert ENTRY [T= ship -> coin -> juice -> coin -> juice -> fill.3 -> coin -> juice -> SKIP
+USECASE = ship -> coin -> juice -> SKIP
+
+GOAL = (global^.numJuice == 0) & goal -> SKIP
+
+assert ENTRY [T= USECASE ; coin -> juice -> fill.3 -> coin -> juice -> SKIP
 assert not (ENTRY [T= ship -> coin -> coin -> juice -> SKIP)
 assert ENTRY [T= ship -> coin -> trouble -> repair -> ship -> coin -> juice -> coin -> juice -> fill.3 -> coin -> juice -> SKIP
+assert ENTRY [T= ship -> coin -> juice -> coin -> juice -> goal -> SKIP
 
