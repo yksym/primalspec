@@ -1,49 +1,59 @@
 primalspec
 ============
 
-CSPMベースの原始的な状態遷移モデル記述言語(原始的: 並行合成と非決定性が扱えない)
+A model language for state machine, or CSP without concurrency and non-determinic transition.
 
-
-使い方
+How to use
 ----------
 
 ```
+stack build
+stack install
 prsp sample/vm.csp
 ```
 
+syntax extension
+-----------------
 
-注意点
-----------
+* record
 
-* 並行合成、内部選択、リネーム、隠蔽等は提供しない
-* 詳細化もほぼ未サポート。[T= はあるが、右辺がペイロードの値が特定可能なイベントとPrefix演算子とSKIPのみで構成されている必要がある
-* P = P や P = P [] Q のようなPrefix演算子を挟まない再帰的な式を評価するとstack overflow エラーが発生する
-
-独自拡張
-----------
-
-T.B.D
-
-* datatypeでレコードも扱える(Haskellのlensライクにアクセスする必要がある)
-* 状態を参照する特別なシンボル global
 ```
-global^.hoge == 3 & ev.4 -> ...
+datatype Hoge {
+    xxx :: Int
+}
+
+v :: Hoge
+v = Hoge.1
+
+get :: (Hoge) -> Int
+get(h) = h ^. xxx
+
+set3 :: (Hoge) -> Hoge
+set3(h) = h { xxx = 3 }
 ```
-* 状態の更新はイベントの直後
+
+* global state
 ```
-ev.3 @( global {hoge = 3, huga = 4} ) -> ...
+datatype Global {
+    tmp :: Int
+}
+
+P = ev1 @( Global.3 ) -> global ^. tmp == 3 & ev2 -> SKIP
+
+assert P [T= ev1 -> ev2 -> SKIP
 ```
 
 
 TODO
 ---
 
+* refactoring
 * module system
 * multi-byte chars
-* Set
-* Tuple
+* rich data type(Set, Tuple)
 * record construction
-* extensible record like?
-* param poly
+* extensible record
+* parametric polymorphism
+* model checking tool
 
 

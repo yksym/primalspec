@@ -5,6 +5,12 @@ datatype Hoge {
     xxx :: Int
 }
 
+get :: (Hoge) -> Int
+get(h) = h ^. xxx
+
+set3 :: (Hoge) -> Hoge
+set3(h) = h { xxx = 3 }
+
 datatype Global {
     tmp :: Int
   , dummy :: U
@@ -17,7 +23,7 @@ channel int : Int
 channel done
 channel init
 
-P = ints?x?y -> x == 2 & SKIP
+P2 = ints?x?y -> x == 2 & SKIP
 
 Q(n,k) = ints.2.n -> Q(n-1, k)
 Q(0,k) = k
@@ -86,6 +92,10 @@ assert g0(g2) + 1 == g0(g1(g2, 2))
 assert init@(Global.1.(U.3).(Hoge.3)) -> FACT(3) [T= (init -> int.3 -> int.2 -> int.1 -> int.1 -> done -> SKIP)
 assert init@(Global.2.(U.3).(Hoge.3)) -> FACT(3) [T= (init -> int.3 -> int.2 -> int.1 -> int.1 -> SKIP)
 
+
+P = init @( g2 ) -> global ^. tmp == 1 & done -> SKIP
+
+assert P [T= init -> done -> SKIP
 
 channel a
 channel b
