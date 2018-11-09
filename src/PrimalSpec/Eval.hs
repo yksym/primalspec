@@ -15,6 +15,8 @@ import Control.Applicative ((<|>))
 import Control.Monad (when, foldM, unless)
 import Control.Monad.Trans.State.Lazy (StateT, evalStateT)
 import Control.Monad.Except(throwError, catchError)
+import GHC.Stack (HasCallStack)
+
 --import Debug.Trace
 
 data Eval = Eval {
@@ -60,12 +62,14 @@ lookupVCtx k loc = do
     counter += 1
     when (cnt > 1000) $ error $ loc ++ "stack over flow"
     v <- lookupCtx ctx k $ loc ++ k ++ " is undefined(value)"
-    v' <- case v of
-        VThunk e -> mkEval e
+    v'' <- case v of
+        VThunk e -> do
+            v' <- mkEval e
+            vctx %= updateCtx (k,v')
+            return v'
         _        -> return v
-    when (v /= v') $ vctx %= updateCtx (k,v')
     counter -= 1
-    return v'
+    return v''
 
 
 tryEvalProcExpr :: Expr -> EvalM (VCtx, VProc)
@@ -76,7 +80,7 @@ tryEvalProcExpr e = do
     vctx .= old
     return (ctx, v)
 
-mkEval :: Expr -> EvalM Value
+mkEval :: (HasCallStack) => Expr -> EvalM Value
 mkEval (EInt           _   v )     = return $ VInt v
 mkEval (EBool          _   v )     = return $ VBool v
 mkEval (EVar           _ "global" )  = do
@@ -98,18 +102,20 @@ mkEval (EApply   loc ef eas) =  do
     case tf of
         VFun defs -> foldr1 (<|>) [go def vas | def <- defs]
         VClosure pts ctx e -> do
+            old <- use vctx
             new <- matchPatterns loc pts vas
             vctx %= appendElmsCtx (ctx ++ new)
             v <- mkEval e
-            vctx %= deleteElmsCtx (ctx ++ new)
+            vctx .= old
             return v
         _ -> throwError $ loc ++ "applied type is not function"
     where
         go (pts, e) vs = do
+            old <- use vctx
             new <- matchPatterns loc pts vs
             vctx %= appendElmsCtx new
             v <- mkEval e
-            vctx %= deleteElmsCtx new
+            vctx .= old
             return v
 
 
@@ -125,19 +131,20 @@ mkEval (ELT      _ e1 e2 ) = apIntCmp (<)      (mkEval e1) (mkEval e2)
 mkEval (EGT      _ e1 e2 ) = apIntCmp (>)      (mkEval e1) (mkEval e2)
 mkEval (ELE      _ e1 e2 ) = apIntCmp (<=)     (mkEval e1) (mkEval e2)
 mkEval (EGE      _ e1 e2 ) = apIntCmp (>=)     (mkEval e1) (mkEval e2)
-mkEval (EEQ      _ e1 e2 ) = apCmp (==)     (mkEval e1) (mkEval e2)
-mkEval (ENE      _ e1 e2 ) = apCmp (/=)     (mkEval e1) (mkEval e2)
+mkEval (EEQ      _ e1 e2 ) = apCmp (eqValue)   (mkEval e1) (mkEval e2)
+mkEval (ENE      _ e1 e2 ) = apCmp (nqValue)   (mkEval e1) (mkEval e2)
 mkEval (EUnMinus _ e1    ) = fmapInt  negate   (mkEval e1)
 mkEval (EUnNot   _ e1    ) = fmapBool not      (mkEval e1)
 mkEval (EIf      _ e1 e2 e3) = do
     (VBool v1) <- mkEval e1
     mkEval $ if v1 then e2 else e3
 mkEval (ELet      loc pt e1 e2) = do
+    old <- use vctx
     v <- mkEval e1
     new <- match loc (pt, v)
     vctx %= appendElmsCtx new
     v' <- mkEval e2
-    vctx %= deleteElmsCtx new
+    vctx .= old
     return v'
 
 mkEval (EFieldAccess l e accs) = do
@@ -275,10 +282,10 @@ matchEvent (EEvent _ c pls, VEvent c' vs) = do
         then fmap concat . sequence <$> sequence [matchPayload c (pl, v) | (pl,v) <- zip pls vs]
         else return Nothing
 
-matchPayload :: String -> (Payload, Value) -> EvalM (Maybe VCtx)
+matchPayload :: (HasCallStack) => String -> (Payload, Value) -> EvalM (Maybe VCtx)
 matchPayload c (PLExp loc e, v) = do
     v' <- mkEval e
-    if v' == v then return $ Just [] else do
+    if eqValue v' v then return $ Just [] else do
             dlogM EVENT_TRACE $ loc ++ c ++ " payload matching fail! "
             dlogM EVENT_TRACE $ show v
             dlogM EVENT_TRACE $ show v'
@@ -294,7 +301,7 @@ matchPayload _ (PLElm loc s1 s2 s3 _ ePred, v) = do
         return $ if b then Just [(s1, v)] else Nothing
         ) `catchError` (\_ -> return Nothing)
 
-trans :: VEvent -> VProc -> EvalM (Maybe VProc)
+trans :: (HasCallStack) => VEvent -> VProc -> EvalM (Maybe VProc)
 trans = trans'
 
 trans' :: VEvent -> VProc -> EvalM (Maybe VProc)

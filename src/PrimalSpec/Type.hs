@@ -5,10 +5,11 @@ module PrimalSpec.Type
   ( module PrimalSpec.Type
   ) where
 
-import Data.List(groupBy, delete, lookup)
+import Data.List(groupBy, lookup)
 --import Data.Monoid((++))
 import Control.Lens
 import Control.Monad.Except(throwError, MonadError)
+import GHC.Stack (HasCallStack)
 
 type Loc = String -- TODO: Loc filepath line col
 
@@ -35,10 +36,9 @@ instance ShowLoc Pattern where
     showLoc (PConstr loc _ _) = loc
 
 data Accessor = Accessor Loc String deriving (Eq, Show)
-data Action = Action Loc [Accessor] Expr deriving (Eq, Show)
+data Action = Action Loc [Accessor] Expr deriving (Show)
 
 data EEvent = EEvent Loc String [Payload]
-    deriving (Eq)
 
 
 instance Show EEvent where
@@ -63,7 +63,7 @@ data Payload
     = PLExp Loc Expr
     | PLPat Loc Pattern
     | PLElm Loc String String String Type Expr
-    deriving (Eq, Show)
+    deriving (Show)
 
 instance ShowLoc Payload where
     showLoc (PLExp loc _ ) = loc
@@ -106,7 +106,7 @@ data Expr
     | EEChoise   Loc Expr Expr
     | ESequence  Loc Expr Expr
     | EInterrupt Loc Expr Expr
-    deriving (Eq, Show)
+    deriving (Show)
 
 makePrisms ''Expr
 
@@ -158,8 +158,6 @@ appendCtx (n, a) c = (n,a) : c
 appendElmsCtx :: Ctx a -> Ctx a -> Ctx a
 appendElmsCtx target ctx = foldr appendCtx ctx target
 
-deleteElmsCtx :: (Eq a) => Ctx a -> Ctx a -> Ctx a
-deleteElmsCtx target ctx = foldr delete ctx target
 
 lookupCtx :: (MonadError String m, Show a) => Ctx a -> String -> String -> m a
 lookupCtx ctx key msg = do
@@ -171,7 +169,7 @@ groupCtx :: Ctx a -> Ctx [a]
 groupCtx ctx = [squash sameKeyValues | sameKeyValues <- groupBy (\x y -> x^._1 == y^._1) ctx]
     where squash ctxs = ((head ctxs)^._1, ctxs ^.. traverse . _2)
 
-updateCtx :: (Eq a) => (String, a) -> Ctx a -> Ctx a
+updateCtx :: (String, a) -> Ctx a -> Ctx a
 updateCtx _ [] = []
 updateCtx c@(k, _) (c'@(k',_):cs) = if k == k' then c:cs else c':(updateCtx c cs)
 
@@ -185,7 +183,6 @@ data VProc
     | VSkip
     | VStop
     -- | VChaos
-    deriving (Eq)
 
 instance Show VProc where
     show = go [] where
@@ -211,10 +208,18 @@ data Value
     | VAccessor Int
     | VProc VProc
     | VProcFun [([Pattern], Expr)]
-    deriving (Show, Eq)
+    deriving (Show)
 
 makePrisms ''Value
 
+eqValue :: (HasCallStack) => Value -> Value -> Bool
+eqValue (VBool v1) (VBool v2) = v1 == v2
+eqValue (VInt  v1) (VInt  v2) = v1 == v2
+eqValue (VConstr c1 vs1) (VConstr c2 vs2) = c1 == c2 && (all id $ zipWith eqValue vs1 vs2)
+eqValue v1 v2 = error $ "invalid argument!!\n" ++ show v1 ++ "\n" ++ show v2
+
+nqValue :: (HasCallStack) => Value -> Value -> Bool
+nqValue x y = not $ eqValue x y
 
 data VEvent = VEvent String [Value] deriving (Show)
 
@@ -234,7 +239,7 @@ data Stmt
     | SEventDecl Loc String [Type]
     | SDataTypeDecl Loc String [DataConstrDecl]
     | SRecordTypeDecl Loc String [FieldDecl]
-    deriving (Eq, Show)
+    deriving (Show)
 
 makePrisms ''Stmt
 
@@ -243,7 +248,7 @@ data Program = Program {
     _tyCtx :: TyCtx
   , _vCtx  :: VCtx
   , _assertList :: [Expr]
-} deriving (Eq, Show)
+} deriving (Show)
 
 makeLenses ''Program
 

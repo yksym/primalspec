@@ -158,9 +158,10 @@ mkJudgePayloads _   t (PLPat _   p            ) = mkJudgePattern t p
 mkJudgePayloads _   t (PLElm loc s1 s2 s3 t' e) = do
     when (s1 /= s2 || s2 /= s3) $ throwError $ loc ++ "constraint vars should be same name"
     let new = [(s1, t')]
+    old <- use tyctx
     tyctx %= appendElmsCtx new
     mkJudge TyBool e
-    tyctx %= deleteElmsCtx new
+    tyctx .= old
     addEq loc t t'
     return new
 
@@ -225,12 +226,13 @@ mkJudge t      (EApply        _   f as) = do
         return v
     mkJudge' (TyFun vs t) f
 mkJudge t      (ELet          _   pt e1 e2) = do
+    old <- use tyctx
     v <- newTyVar
     new <- mkJudgePattern v pt
     mkJudge' v e1
     tyctx %= appendElmsCtx new
     mkJudge' t e2
-    tyctx %= deleteElmsCtx new
+    tyctx .= old
 mkJudge t      (EIf           _   c e1 e2)  = mkJudge' TyBool c >> mkJudge' t     e1 >> mkJudge' t     e2
 
 mkJudge t      (EFieldAccess  loc   e accs)   = do
@@ -282,10 +284,11 @@ mkJudge TyBool e                        = judgeError TyBool e
 
 mkJudge (TyFun targs tret) (EAbst  _ pts e) = do
     when (length pts /= length targs) $ throwError $ showLoc e ++ "doesn't match num of args"
+    old <- use tyctx
     new <- concat <$> (sequence $ go <$> zip pts targs)
     tyctx %= appendElmsCtx new
     mkJudge' tret e
-    tyctx %= deleteElmsCtx new
+    tyctx .= old
     where
         go (pt, targ) = mkJudgePattern targ pt
 
@@ -310,12 +313,13 @@ mkJudge t@(TyVar _) (EEQ           loc l r   ) = addEq loc t TyBool >> mkJudge' 
 mkJudge t@(TyVar _) (ENE           loc l r   ) = addEq loc t TyBool >> mkJudge' TyBool l  >> mkJudge' TyBool r
 mkJudge t@(TyVar _) (EUnNot        loc e     ) = addEq loc t TyBool >> mkJudge' TyBool e
 mkJudge t@(TyVar _) (EAbst         loc pts e ) = do
+    old <- use tyctx
     (ts, new) <- foldM go ([], []) pts
     v' <- newTyVar
     addEq loc (TyFun ts v') t
     tyctx %= appendElmsCtx new
     mkJudge' v' e
-    tyctx %= deleteElmsCtx new
+    tyctx .= old
     where
         go (vs, elms) pt = do
             v <- newTyVar
@@ -327,6 +331,7 @@ mkJudge (TyConstr _ _) e = throwError $ showLoc e ++ "type should be constructor
 mkJudge TyProc (EPrefix    _ (EEvent loc c as) pe me) = do
     TyConstr targs _ <- lookupTyCtx c loc
     when (length as /= length targs) $ throwError $ loc ++ c ++ " doesn't match num of args"
+    old <- use tyctx
     news <- forM (zip as targs) $ \(a, targ) -> do
         mkJudgePayloads loc targ a
     tyctx %= (appendElmsCtx $ concat news)
@@ -334,7 +339,7 @@ mkJudge TyProc (EPrefix    _ (EEvent loc c as) pe me) = do
         Just e -> mkJudge' (TyData "Global") e
         _ -> return ()
     mkJudge' TyProc pe
-    tyctx %= (deleteElmsCtx $ concat news)
+    tyctx .= old
 
 mkJudge TyProc (EGuard   _ be pe)    = do
     mkJudge' TyBool be
