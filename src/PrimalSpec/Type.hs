@@ -5,7 +5,7 @@ module PrimalSpec.Type
   ( module PrimalSpec.Type
   ) where
 
-import Data.List(groupBy, delete, elemIndex, lookup)
+import Data.List(groupBy, delete, lookup)
 --import Data.Monoid((++))
 import Control.Lens
 import Control.Monad.Except(throwError, MonadError)
@@ -171,11 +171,9 @@ groupCtx :: Ctx a -> Ctx [a]
 groupCtx ctx = [squash sameKeyValues | sameKeyValues <- groupBy (\x y -> x^._1 == y^._1) ctx]
     where squash ctxs = ((head ctxs)^._1, ctxs ^.. traverse . _2)
 
-updateCtx :: (Eq a) => String -> a -> a -> Ctx a -> Ctx a
-updateCtx k old new ctx = do
-    case elemIndex (k, old) ctx of
-        Just i -> ctx & ix i .~ (k, new)
-        Nothing -> ctx
+updateCtx :: (Eq a) => (String, a) -> Ctx a -> Ctx a
+updateCtx _ [] = []
+updateCtx c@(k, _) (c'@(k',_):cs) = if k == k' then c:cs else c':(updateCtx c cs)
 
 type VCtx  = Ctx Value
 

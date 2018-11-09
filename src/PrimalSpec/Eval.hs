@@ -12,7 +12,7 @@ import PrimalSpec.Util
 import Data.Maybe (isJust, fromJust)
 import Control.Lens hiding (op)
 import Control.Applicative ((<|>))
-import Control.Monad (when, foldM)
+import Control.Monad (when, foldM, unless)
 import Control.Monad.Trans.State.Lazy (StateT, evalStateT)
 import Control.Monad.Except(throwError, catchError)
 --import Debug.Trace
@@ -20,6 +20,7 @@ import Control.Monad.Except(throwError, catchError)
 data Eval = Eval {
     _counter  :: Int
   , _vctx     :: VCtx
+  , _global   :: Maybe Value
 }
 
 makeLenses ''Eval
@@ -27,7 +28,7 @@ makeLenses ''Eval
 type EvalM a = StateT Eval (Either String) a
 
 runEvalM :: VCtx -> EvalM Value -> Either String Value
-runEvalM ctx m = evalStateT m $ Eval 0 ctx
+runEvalM ctx m = evalStateT m $ Eval 0 ctx Nothing
 
 match :: Loc -> (Pattern, Value) -> EvalM VCtx
 match loc (PInt _ n, VInt m)
@@ -62,10 +63,9 @@ lookupVCtx k loc = do
     v' <- case v of
         VThunk e -> mkEval e
         _        -> return v
-    when (v /= v') $ vctx %= updateCtx k v v'
+    when (v /= v') $ vctx %= updateCtx (k,v')
     counter -= 1
     return v'
-
 
 
 tryEvalProcExpr :: Expr -> EvalM (VCtx, VProc)
@@ -79,7 +79,10 @@ tryEvalProcExpr e = do
 mkEval :: Expr -> EvalM Value
 mkEval (EInt           _   v )     = return $ VInt v
 mkEval (EBool          _   v )     = return $ VBool v
-mkEval (EVar           loc v@"global" )  = lookupVCtx v loc <|> error "global should be set"
+mkEval (EVar           _ "global" )  = do
+    m <- use global
+    unless (isJust m) $ error "global should be set"
+    return $ fromJust m
 mkEval (EVar           loc v )     = lookupVCtx v loc
 mkEval (EId            loc v )     = lookupVCtx v loc <|>  return (VConstr v [])
 mkEval (EConstr        _   c as)   = do
@@ -157,13 +160,15 @@ mkEval (ERefTrace   loc e1 e2) = do
     where
         go [] _       = return True
         go (ev:ev1) v = do
-            dlogM EVENT_TRACE $ show ev
-            dlogM EVENT_TRACE $ show v
+            dlogM EVENT_TRACE $ "try event: " ++ show ev
+            dlogM EVENT_TRACE $ "current process" ++ show v
+            g <- use global
+            dlogM EVENT_TRACE $ "current state" ++ show g
             mk <- trans ev v
             case mk of
                 Just k -> go ev1 k
                 Nothing -> do
-                    dlogM EVENT_TRACE $ loc ++ "cannot trans:" ++ show ev ++ show v
+                    dlogM EVENT_TRACE $ loc ++ "cannot trans"
                     throwError ""
 
 mkEval (EPrefix    _ ev e me) = do
@@ -256,7 +261,8 @@ concatAccess l (Accessor _ aname : accs) = do
     return $ (_VConstr . _2 . ix n) . lns
 
 matchEvent :: (EEvent, VEvent) -> EvalM (Maybe VCtx)
-matchEvent (EEvent _ c pls, VEvent c' vs) =
+matchEvent (EEvent _ c pls, VEvent c' vs) = do
+    when (c == c') $ dlogM EVENT_TRACE $ "payload matching start: " ++ c
     if c == c'
         then fmap concat . sequence <$> sequence [matchPayload (pl, v) | (pl,v) <- zip pls vs]
         else return Nothing
@@ -264,7 +270,11 @@ matchEvent (EEvent _ c pls, VEvent c' vs) =
 matchPayload :: (Payload, Value) -> EvalM (Maybe VCtx)
 matchPayload (PLExp _ e, v) = do
     v' <- mkEval e
-    if v' == v then return $ Just [] else return Nothing
+    if v' == v then return $ Just [] else do
+            dlogM EVENT_TRACE $ "payload matching fail!"
+            dlogM EVENT_TRACE $ show v
+            dlogM EVENT_TRACE $ show v'
+            return Nothing
 matchPayload (PLPat loc p, v) = (Just <$> match loc (p, v)) `catchError` (\_ -> return Nothing)
 matchPayload (PLElm loc s1 s2 s3 _ ePred, v) = do
     when (s1 /= s2 || s2 /= s3) $ throwError $ loc ++ "this syntax is not implemented"
@@ -291,21 +301,24 @@ trans' ev (VPrefix  eev e me) = do
                 Just e' -> do
                     g <- mkEval e'
                     vctx .= cur
-                    dlogM EVENT_TRACE $ "save(" ++ show e' ++ ") " ++ show g
-                    vctx %= appendElmsCtx [("global", g)] -- update is better
+                    dlogM EVENT_TRACE $ "Global Updated"
+                    global .= Just g
                 _ -> return ()
             (VProc v) <- mkEval e
             return $ Just v
 
 trans' ev (VEChoise  (ctx1, v1) (ctx2, v2)) = do
     vctx .= ctx1
+    g0 <- use global
     v1'  <- trans ev v1
     new1 <- use vctx
+    g1 <- use global
     vctx .= ctx2
+    global .= g0
     v2' <- trans ev v2
     if
        | isJust v1' && isJust v2' -> throwError "undeterministic choise"
-       | isJust v1'               -> do { vctx .= new1; return v1'}
+       | isJust v1'               -> do { vctx .= new1; global .= g1; return v1'}
        | isJust v2'               -> return v2'
        | otherwise                -> return Nothing
 
@@ -323,13 +336,16 @@ trans' ev (VSequence (ctx1, v1) (ctx2, e))      = do
 
 trans' ev (VInterrupt (ctx1, v1) (ctx2, v2))      = do
     vctx .= ctx1
+    g0 <- use global
     v1'  <- trans ev v1
     new1 <- use vctx
+    g1 <- use global
     vctx .= ctx2
+    global .= g0
     v2' <- trans ev v2
     if
        | isJust v1' && isJust v2' -> throwError $ show ev ++ "undeterministic choise"
-       | isJust v1'               -> return $ return $ VInterrupt (new1, fromJust v1') (ctx2, v2)
+       | isJust v1'               -> do { global .= g1; return $ return $ VInterrupt (new1, fromJust v1') (ctx2, v2)}
        | isJust v2'               -> do { return v2'}
        | otherwise                -> return Nothing
 
