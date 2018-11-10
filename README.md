@@ -1,7 +1,12 @@
 primalspec
 ============
 
-A model language for state machine, or CSP without concurrency and non-determinic transition.
+A model checker for state machine, or CSP without concurrency and non-determinic transition, or a lesser [FDR](https://www.cs.ox.ac.uk/projects/fdr/).
+
+* MIT License
+* command line tool
+* syntax extension(record, global state)
+
 
 How to use
 ----------
@@ -43,17 +48,22 @@ P = ev1 @( Global.3 ) -> global ^. tmp == 3 & ev2 -> SKIP
 assert P [T= ev1 -> ev2 -> SKIP
 ```
 
+NOTE: Currently, only '''->''' and ''';''' can be used in a RHS of '''[T='''.
+
 
 TODO
 ---
 
-* refactoring
+* make event Expr (now event is not used as an argument)
 * module system
+* event-hook function for programing
+* model checking function
+
 * multi-byte chars
-* rich data type(Set, Tuple)
 * record construction
 * extensible record
 * parametric polymorphism
-* model checking tool
+* rich data type(Set, Tuple)
+* repl checker
 
 
