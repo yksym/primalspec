@@ -166,7 +166,7 @@ mkEval (ERefTrace   loc e1 e2) = do
     return $ VBool b
     where
         go [] _       = return True
-        go (ev:ev1) v = do
+        go ((l,ev):ev1) v = do
             g <- use global
             dlogM EVENT_TRACE $ "--------------"
             dlogM EVENT_TRACE $ "STATE"
@@ -179,7 +179,7 @@ mkEval (ERefTrace   loc e1 e2) = do
             dlogM EVENT_TRACE $ "--------------"
             dlogM EVENT_TRACE $ "TRY EVENT"
             dlogM EVENT_TRACE $ "--------------"
-            dlogM EVENT_TRACE $ show ev ++ "\n"
+            dlogM EVENT_TRACE $ l ++ show ev ++ "\n"
             mk <- trans ev v
             case mk of
                 Just k -> go ev1 k
@@ -378,13 +378,13 @@ evalEvent (EEvent _ c pls) = do
     vs <- sequence $ evalPayload <$> pls
     return $ VEvent c vs
 
-extractEvents :: VProc -> EvalM [VEvent]
+extractEvents :: VProc -> EvalM [(Loc, VEvent)]
 extractEvents VSkip = return []
 extractEvents (VPrefix ee e _) = do
     ev <- evalEvent ee
     VProc e' <- mkEval e
     evs <- extractEvents e'
-    return $ ev:evs
+    return $ (showLoc ee, ev):evs
 extractEvents (VSequence (c1, p1) (c2, ep2)) = do
     old <- use vctx
     vctx .= c1

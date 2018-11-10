@@ -1,8 +1,9 @@
 primalspec
 ============
 
-A model checker for state machine, or CSP without concurrency and non-determinic transition, or a lesser [FDR](https://www.cs.ox.ac.uk/projects/fdr/).
+A model checker for state machine; a lesser [FDR](https://www.cs.ox.ac.uk/projects/fdr/).
 
+* CSP without concurrency and internal event(non-determinic transition)
 * MIT License
 * command line tool
 * syntax extension(record, global state)
@@ -54,6 +55,7 @@ NOTE: Currently, only '''->''' and ''';''' can be used in a RHS of '''[T='''.
 TODO
 ---
 
+* make code elegant
 * make event Expr (now event is not used as an argument)
 * module system
 * event-hook function for programing

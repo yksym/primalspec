@@ -41,6 +41,9 @@ data Action = Action Loc [Accessor] Expr deriving (Show)
 data EEvent = EEvent Loc String [Payload]
 
 
+instance ShowLoc EEvent where
+    showLoc (EEvent l _ _) = l
+
 instance Show EEvent where
     show (EEvent l c _) = c ++ "(" ++ l ++ ")"
 
