@@ -53,116 +53,105 @@ matchPatterns loc pts vs = do
     concat <$> sequence ( match loc <$> zip pts vs)
 
 evalExpr :: VCtx -> Expr -> Either String Value
-evalExpr ctx e = runEvalM ctx $ mkEval e
+evalExpr ctx e = runEvalM ctx $ mkEval [] e
 
-lookupVCtx :: String -> Loc -> EvalM Value
-lookupVCtx k loc = do
+-- TODO global var should only in Proc
+-- thunk exists only in vctx
+lookupVCtx :: VCtx -> String -> Loc -> EvalM Value
+lookupVCtx new k loc = do
     cnt <- use counter
     ctx <- use vctx
     counter += 1
     when (cnt > 1000) $ error $ loc ++ "stack over flow"
-    v <- lookupCtx ctx k $ loc ++ k ++ " is undefined(value)"
+    v <- lookupCtx (appendElmsCtx new ctx) k $ loc ++ k ++ " is undefined(value)"
     v'' <- case v of
         VThunk e -> do
-            v' <- mkEval e
+            v' <- mkEval [] e
             vctx %= updateCtx (k,v')
+            return v'
+        VThunkProc e -> do
+            v' <- mkEval [] e
             return v'
         _        -> return v
     counter -= 1
     return v''
 
 
-tryEvalProcExpr :: Expr -> EvalM (VCtx, VProc)
-tryEvalProcExpr e = do
-    old <- use vctx
-    (VProc v) <- mkEval e
-    ctx <- use vctx
-    vctx .= old
-    return (ctx, v)
-
-mkEval :: (HasCallStack) => Expr -> EvalM Value
-mkEval (EInt           _   v )     = return $ VInt v
-mkEval (EBool          _   v )     = return $ VBool v
-mkEval (EVar           _ "global" )  = do
+mkEval :: (HasCallStack) => VCtx -> Expr -> EvalM Value
+mkEval _ (EInt           _   v )     = return $ VInt v
+mkEval _ (EBool          _   v )     = return $ VBool v
+mkEval _ (EVar           _ "global" )  = do
     m <- use global
     unless (isJust m) $ error "global should be set"
     return $ fromJust m
-mkEval (EVar           loc v )     = lookupVCtx v loc
-mkEval (EId            loc v )     = lookupVCtx v loc <|>  return (VConstr v [])
-mkEval (EConstr        _   c as)   = do
-    vs <- sequence $ mkEval <$> as
+mkEval ctx (EVar           loc v )     = lookupVCtx ctx v loc
+mkEval ctx (EId            loc v )     = lookupVCtx ctx v loc <|>  return (VConstr v [])
+mkEval ctx (EConstr        _   c as)   = do
+    vs <- sequence $ mkEval ctx <$> as
     return $ VConstr c vs
-mkEval (EParenthesis   _   e )     = mkEval e
-mkEval (EAbst          _   args e) = do
-    ctx <- use vctx
-    return $ VClosure args ctx e
-mkEval (EApply   loc ef eas) =  do
-    tf <- mkEval ef
-    vas <- sequence $ mkEval <$> eas
+mkEval ctx (EParenthesis   _   e )     = mkEval ctx e
+mkEval ctx (EAbst          _   args e) = return $ VClosure args ctx e
+mkEval ctx (EApply   loc ef eas) =  do
+    tf <- mkEval ctx ef
+    vas <- sequence $ mkEval ctx <$> eas
     case tf of
         VFun defs -> foldr1 (<|>) [go def vas | def <- defs]
-        VClosure pts ctx e -> do
-            old <- use vctx
+        VClosure pts ctx' e -> do
             new <- matchPatterns loc pts vas
-            vctx %= appendElmsCtx (ctx ++ new)
-            v <- mkEval e
-            vctx .= old
+            v <- mkEval (appendElmsCtx new ctx') e
             return v
         _ -> throwError $ loc ++ "applied type is not function"
     where
         go (pts, e) vs = do
-            old <- use vctx
             new <- matchPatterns loc pts vs
-            vctx %= appendElmsCtx new
-            v <- mkEval e
-            vctx .= old
+            v <- mkEval new e
             return v
 
 
-mkEval (ETimes   _ e1 e2 ) = apInt    (*)      (mkEval e1) (mkEval e2)
-mkEval (EDiv     _ e1 e2 ) = apInt    div      (mkEval e1) (mkEval e2)
-mkEval (EMod     _ e1 e2 ) = apInt    mod      (mkEval e1) (mkEval e2)
-mkEval (EPower   _ e1 e2 ) = apInt    (^)      (mkEval e1) (mkEval e2)
-mkEval (EPlus    _ e1 e2 ) = apInt    (+)      (mkEval e1) (mkEval e2)
-mkEval (EMinus   _ e1 e2 ) = apInt    (-)      (mkEval e1) (mkEval e2)
-mkEval (EAnd     _ e1 e2 ) = apBool   (&&)     (mkEval e1) (mkEval e2)
-mkEval (EOr      _ e1 e2 ) = apBool   (||)     (mkEval e1) (mkEval e2)
-mkEval (ELT      _ e1 e2 ) = apIntCmp (<)      (mkEval e1) (mkEval e2)
-mkEval (EGT      _ e1 e2 ) = apIntCmp (>)      (mkEval e1) (mkEval e2)
-mkEval (ELE      _ e1 e2 ) = apIntCmp (<=)     (mkEval e1) (mkEval e2)
-mkEval (EGE      _ e1 e2 ) = apIntCmp (>=)     (mkEval e1) (mkEval e2)
-mkEval (EEQ      _ e1 e2 ) = apCmp (eqValue)   (mkEval e1) (mkEval e2)
-mkEval (ENE      _ e1 e2 ) = apCmp (nqValue)   (mkEval e1) (mkEval e2)
-mkEval (EUnMinus _ e1    ) = fmapInt  negate   (mkEval e1)
-mkEval (EUnNot   _ e1    ) = fmapBool not      (mkEval e1)
-mkEval (EIf      _ e1 e2 e3) = do
-    (VBool v1) <- mkEval e1
-    mkEval $ if v1 then e2 else e3
-mkEval (ELet      loc pt e1 e2) = do
-    old <- use vctx
-    v <- mkEval e1
+mkEval ctx (ETimes   _ e1 e2 ) = apInt    (*)      (mkEval ctx e1) (mkEval ctx e2)
+mkEval ctx (EDiv     _ e1 e2 ) = apInt    div      (mkEval ctx e1) (mkEval ctx e2)
+mkEval ctx (EMod     _ e1 e2 ) = apInt    mod      (mkEval ctx e1) (mkEval ctx e2)
+mkEval ctx (EPower   _ e1 e2 ) = apInt    (^)      (mkEval ctx e1) (mkEval ctx e2)
+mkEval ctx (EPlus    _ e1 e2 ) = apInt    (+)      (mkEval ctx e1) (mkEval ctx e2)
+mkEval ctx (EMinus   _ e1 e2 ) = apInt    (-)      (mkEval ctx e1) (mkEval ctx e2)
+mkEval ctx (EAnd     _ e1 e2 ) = apBool   (&&)     (mkEval ctx e1) (mkEval ctx e2)
+mkEval ctx (EOr      _ e1 e2 ) = apBool   (||)     (mkEval ctx e1) (mkEval ctx e2)
+mkEval ctx (ELT      _ e1 e2 ) = apIntCmp (<)      (mkEval ctx e1) (mkEval ctx e2)
+mkEval ctx (EGT      _ e1 e2 ) = apIntCmp (>)      (mkEval ctx e1) (mkEval ctx e2)
+mkEval ctx (ELE      _ e1 e2 ) = apIntCmp (<=)     (mkEval ctx e1) (mkEval ctx e2)
+mkEval ctx (EGE      _ e1 e2 ) = apIntCmp (>=)     (mkEval ctx e1) (mkEval ctx e2)
+mkEval ctx (EEQ      _ e1 e2 ) = apCmp (eqValue)   (mkEval ctx e1) (mkEval ctx e2)
+mkEval ctx (ENE      _ e1 e2 ) = apCmp (nqValue)   (mkEval ctx e1) (mkEval ctx e2)
+mkEval ctx (EUnMinus _ e1    ) = fmapInt  negate   (mkEval ctx e1)
+mkEval ctx (EUnNot   _ e1    ) = fmapBool not      (mkEval ctx e1)
+mkEval ctx (EIf      _ e1 e2 e3) = do
+    (VBool v1) <- mkEval ctx e1
+    mkEval ctx $ if v1 then e2 else e3
+mkEval ctx (ELet      loc pt e1 e2) = do
+    v <- mkEval ctx e1
     new <- match loc (pt, v)
-    vctx %= appendElmsCtx new
-    v' <- mkEval e2
-    vctx .= old
+    v' <- mkEval (appendElmsCtx new ctx) e2
     return v'
 
-mkEval (EFieldAccess l e accs) = do
-    v <- mkEval e
+mkEval ctx (EFieldAccess l e accs) = do
+    v <- mkEval ctx e
     access l v accs
 
-mkEval (EActionUpdate _ e acts) = do
-    v <- mkEval e
-    update v acts
+mkEval ctx (EActionUpdate _ e acts) = do
+    v <- mkEval ctx e
+    foldM f v acts
+    where
+    f v (Action l accs e') = do
+        lns <- concatAccess l accs
+        v' <- mkEval ctx e'
+        return $ v & lns .~ v'
 
-mkEval (ERefTrace   loc e1 e2) = do
-    old <- use vctx
-    (VProc v2) <- mkEval e2
+
+mkEval ctx (ERefTrace   loc e1 e2) = do
+    (VProc v2) <- mkEval ctx e2
     evs <- extractEvents v2
-    vctx .= old
-    (VProc v1) <- mkEval e1
-    b <- go evs v1 <|> return False
-    vctx .= old
+    (VProc v1) <- mkEval ctx e1
+    b <- (go evs v1) `catchError` (\e -> do {dlogM EVENT_TRACE e; return False})
     return $ VBool b
     where
         go [] _       = return True
@@ -176,6 +165,10 @@ mkEval (ERefTrace   loc e1 e2) = do
             dlogM EVENT_TRACE $ "PROCESS"
             dlogM EVENT_TRACE $ "--------------"
             dlogM EVENT_TRACE $ show v ++ "\n"
+            --dlogM EVENT_TRACE $ "--------------"
+            --dlogM EVENT_TRACE $ "CONTEXT"
+            --dlogM EVENT_TRACE $ "--------------"
+            --dlogM EVENT_TRACE $ showCtx ctx' ++ "\n"
             dlogM EVENT_TRACE $ "--------------"
             dlogM EVENT_TRACE $ "TRY EVENT"
             dlogM EVENT_TRACE $ "--------------"
@@ -187,38 +180,40 @@ mkEval (ERefTrace   loc e1 e2) = do
                     dlogM EVENT_TRACE $ loc ++ "cannot trans" ++ "\n"
                     throwError ""
 
-mkEval (EPrefix    _ ev e me) = do
-    return $ VProc $ VPrefix ev e me
-mkEval (EEChoise   _ e1 e2) = do
-    ret1 <- tryEvalProcExpr e1
-    ret2 <- tryEvalProcExpr e2
-    return $ VProc $ VEChoise ret1 ret2
-mkEval (EGuard     _ e1 e2 ) = do
-    b <- mkEval e1
+mkEval ctx (EPrefix    _ ev e me) = do
+    return $ VProc $ VPrefix ctx ev e me
+mkEval ctx (EEChoise   _ e1 e2) = do
+    (VProc v1) <- mkEval ctx e1
+    (VProc v2) <- mkEval ctx e2
+    return $ VProc $ VEChoise v1 v2
+mkEval ctx (EGuard     l e1 e2 ) = do
+    b <- mkEval ctx e1
     case b of
-        VBool True -> mkEval e2
-        VBool False -> return $ VProc VStop
+        VBool True -> mkEval ctx e2
+        VBool False -> do
+            dlogM EVENT_TRACE $ "=============="
+            dlogM EVENT_TRACE $ "GUARD FAILURE"
+            dlogM EVENT_TRACE $ "=============="
+            dlogM EVENT_TRACE $ l
+            return $ VProc VStop
         _ -> error "bug"
-mkEval (ESequence  _ e1 e2 ) = do
-    ret1 <- tryEvalProcExpr e1
-    cur <- use vctx
-    return $ VProc $ VSequence ret1 (cur, e2)
-mkEval (EInterrupt _ e1 e2 ) = do
-    ret1 <- tryEvalProcExpr e1
-    ret2 <- tryEvalProcExpr e2
-    return $ VProc $ VInterrupt ret1 ret2
-mkEval (EProcRef loc s [] ) = lookupVCtx s loc
-mkEval (EProcRef loc s es ) = do
-    (VProcFun defs) <- lookupVCtx s loc
-    vas <- sequence $ mkEval <$> es
-    -- clearContext
-    e' <- foldr1 (<|>) [go def vas | def <- defs]
-    mkEval e'
+mkEval ctx (ESequence  _ e1 e2 ) = do
+    VProc v1 <- mkEval ctx e1
+    return $ VProc $ VSequence v1 (ctx, e2)
+mkEval ctx (EInterrupt _ e1 e2 ) = do
+    VProc v1 <- mkEval ctx e1
+    VProc v2 <- mkEval ctx e2
+    return $ VProc $ VInterrupt v1 v2
+mkEval ctx (EProcRef loc s [] ) = lookupVCtx ctx s loc
+mkEval ctx (EProcRef loc s es ) = do
+    (VProcFun defs) <- lookupVCtx ctx s loc
+    vas <- sequence $ mkEval ctx <$> es
+    (ctx', e') <- foldr1 (<|>) [go def vas | def <- defs]
+    mkEval ctx' e'
     where
         go (pts, e) vs = do
             new <- matchPatterns loc pts vs
-            vctx %= appendElmsCtx new
-            return e
+            return (new, e)
 
 apCmp :: (t1 -> t2 -> Bool) -> EvalM t1 -> EvalM t2 -> EvalM Value
 apCmp op m1 m2 = do
@@ -258,141 +253,123 @@ access :: Loc -> Value -> [Accessor] -> EvalM Value
 access _ v [] = return v
 access l v accs = do
     lns <- concatAccess l accs
-    --traceShowM (v, accs)
     return $ v ^?! lns
-
-update :: Value -> [Action] -> EvalM Value
-update = foldM f
-    where
-    f v (Action l accs e) = do
-        lns <- concatAccess l accs
-        v' <- mkEval e
-        return $ v & lns .~ v'
 
 concatAccess :: Applicative f => Loc -> [Accessor] -> EvalM ((Value -> f Value) -> Value -> f Value)
 concatAccess _ [] = return id
 concatAccess l (Accessor _ aname : accs) = do
-    (VAccessor n) <- lookupVCtx aname l
+    (VAccessor n) <- lookupVCtx [] aname l
     lns <- concatAccess l accs
     return $ (_VConstr . _2 . ix n) . lns
 
-matchEvent :: (EEvent, VEvent) -> EvalM (Maybe VCtx)
-matchEvent (EEvent _ c pls, VEvent c' vs) = do
+matchEvent :: VCtx -> (EEvent, VEvent) -> EvalM (Maybe VCtx)
+matchEvent ctx (EEvent _ c pls, VEvent c' vs) = do
     if c == c'
-        then fmap concat . sequence <$> sequence [matchPayload c (pl, v) | (pl,v) <- zip pls vs]
+        then fmap concat . sequence <$> sequence [matchPayload (pl, v) | (pl,v) <- zip pls vs]
         else return Nothing
-
-matchPayload :: (HasCallStack) => String -> (Payload, Value) -> EvalM (Maybe VCtx)
-matchPayload c (PLExp loc e, v) = do
-    v' <- mkEval e
-    if eqValue v' v then return $ Just [] else do
-            dlogM EVENT_TRACE $ loc ++ c ++ " payload matching fail! "
-            dlogM EVENT_TRACE $ show v
-            dlogM EVENT_TRACE $ show v'
-            return Nothing
-matchPayload _ (PLPat loc p, v) = (Just <$> match loc (p, v)) `catchError` (\_ -> return Nothing)
-matchPayload _ (PLElm loc s1 s2 s3 _ ePred, v) = do
-    when (s1 /= s2 || s2 /= s3) $ throwError $ loc ++ "this syntax is not implemented"
-    (do
-        ctx <- use vctx
-        vctx %= appendElmsCtx [(s1, v)]
-        (VBool b) <- mkEval ePred
-        vctx .= ctx
-        return $ if b then Just [(s1, v)] else Nothing
-        ) `catchError` (\_ -> return Nothing)
+    where
+    matchPayload (PLExp loc e, v) = do
+        v' <- mkEval ctx e
+        if eqValue v' v then return $ Just [] else do
+                dlogM EVENT_TRACE $ loc ++ c ++ " payload matching fail! "
+                dlogM EVENT_TRACE $ show v
+                dlogM EVENT_TRACE $ show v'
+                return Nothing
+    matchPayload (PLPat loc p, v) = (Just <$> match loc (p, v)) `catchError` (\e -> do
+                dlogM EVENT_TRACE $ e
+                return Nothing
+                )
+    matchPayload (PLElm loc s1 s2 s3 _ ePred, v) = do
+        when (s1 /= s2 || s2 /= s3) $ throwError $ loc ++ "this syntax is not implemented"
+        (do
+            (VBool b) <- mkEval (appendElmsCtx [(s1, v)] ctx) ePred
+            return $ if b then Just [(s1, v)] else Nothing) `catchError` (\e -> do
+                dlogM EVENT_TRACE $ e
+                return Nothing
+                )
 
 trans :: (HasCallStack) => VEvent -> VProc -> EvalM (Maybe VProc)
 trans = trans'
 
 trans' :: VEvent -> VProc -> EvalM (Maybe VProc)
-trans' ev (VPrefix  eev e me) = do
-    mctx <- matchEvent (eev, ev)
+trans' ev (VPrefix  ctx eev e me) = do
+    mctx <- matchEvent ctx (eev, ev)
     case mctx of
         Nothing  -> return Nothing
-        Just ctx -> do
-            vctx %= appendElmsCtx ctx
-            cur <- use vctx
+        Just new -> do
+            let ctx' = appendElmsCtx new ctx
             case me of
                 Just e' -> do
-                    g <- mkEval e'
-                    vctx .= cur
+                    g <- mkEval ctx' e'
                     dlogM EVENT_TRACE $ "=============="
                     dlogM EVENT_TRACE $ "CHANGE Global"
                     dlogM EVENT_TRACE $ "==============\n"
                     global .= Just g
                 _ -> return ()
-            (VProc v) <- mkEval e
+            (VProc v) <- mkEval ctx' e
+            --dlogM TRACE_CTX $ showCtx $ v ^? _VPrefix . _1
             return $ Just v
 
-trans' ev (VEChoise  (ctx1, v1) (ctx2, v2)) = do
-    vctx .= ctx1
+trans' ev (VEChoise  v1  v2) = do
     g0 <- use global
     v1'  <- trans ev v1
-    new1 <- use vctx
     g1 <- use global
-    vctx .= ctx2
     global .= g0
     v2' <- trans ev v2
+    g2 <- use global
+    global .= g0
     if
        | isJust v1' && isJust v2' -> throwError "undeterministic choise"
-       | isJust v1'               -> do { vctx .= new1; global .= g1; return v1'}
-       | isJust v2'               -> return v2'
+       | isJust v1'               -> do { global .= g1; return v1'}
+       | isJust v2'               -> do { global .= g2; return v2'}
        | otherwise                -> return Nothing
 
-trans' ev (VSequence (ctx1, v1) (ctx2, e))      = do
+trans' ev (VSequence v1 (ctx, e))      = do
     case v1 of
         VSkip -> do
-            vctx .= ctx2
-            (VProc v2) <- mkEval e
+            (VProc v2) <- mkEval ctx e
             trans' ev v2
         _ -> do
-            vctx .= ctx1
             mv1' <- trans' ev v1
-            new1 <- use vctx
-            return $ mv1' >>= \v -> return $ VSequence (new1, v) (ctx2, e)
+            return $ mv1' >>= \v -> return $ VSequence v (ctx, e)
 
-trans' ev (VInterrupt (ctx1, v1) (ctx2, v2))      = do
-    vctx .= ctx1
+trans' ev (VInterrupt v1 v2)      = do
     g0 <- use global
     v1'  <- trans ev v1
-    new1 <- use vctx
     g1 <- use global
-    vctx .= ctx2
     global .= g0
     v2' <- trans ev v2
+    g2 <- use global
+    global .= g0
     if
        | isJust v1' && isJust v2' -> throwError $ show ev ++ "undeterministic choise"
-       | isJust v1'               -> do { global .= g1; return $ return $ VInterrupt (new1, fromJust v1') (ctx2, v2)}
-       | isJust v2'               -> do { return v2'}
+       | isJust v1'               -> do { global .= g1; return $ return $ VInterrupt (fromJust v1') v2}
+       | isJust v2'               -> do { global .= g2; return v2'}
        | otherwise                -> return Nothing
 
 trans' _ VStop = return Nothing
 trans' _ VSkip = return Nothing
 
-evalPayload :: Payload -> EvalM Value
-evalPayload (PLExp _ e) = mkEval e
-evalPayload p = throwError $ showLoc p ++ "caanot calc value"
+evalPayload :: VCtx -> Payload -> EvalM Value
+evalPayload ctx (PLExp _ e) = mkEval ctx e
+evalPayload _ p = throwError $ showLoc p ++ "caanot calc value"
 
-evalEvent :: EEvent -> EvalM VEvent
-evalEvent (EEvent _ c pls) = do
-    vs <- sequence $ evalPayload <$> pls
+evalEvent :: VCtx -> EEvent -> EvalM VEvent
+evalEvent ctx (EEvent _ c pls) = do
+    vs <- sequence $ evalPayload ctx <$> pls
     return $ VEvent c vs
 
 extractEvents :: VProc -> EvalM [(Loc, VEvent)]
 extractEvents VSkip = return []
-extractEvents (VPrefix ee e _) = do
-    ev <- evalEvent ee
-    VProc e' <- mkEval e
+extractEvents (VPrefix ctx ee e _) = do
+    ev <- evalEvent ctx ee
+    VProc e' <- mkEval ctx e
     evs <- extractEvents e'
     return $ (showLoc ee, ev):evs
-extractEvents (VSequence (c1, p1) (c2, ep2)) = do
-    old <- use vctx
-    vctx .= c1
-    es1 <- extractEvents p1
-    vctx .= c2
-    VProc p2 <- mkEval ep2
+extractEvents (VSequence (v1) (c, e2)) = do
+    es1 <- extractEvents v1
+    VProc p2 <- mkEval c e2
     es2 <- extractEvents p2
-    vctx .= old
     return $ es1 ++ es2
 extractEvents _ = throwError "invalid proc expr"
 

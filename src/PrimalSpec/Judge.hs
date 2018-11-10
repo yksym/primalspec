@@ -24,7 +24,7 @@ type Solution = (Int, Type)
 data Judge = Judge {
     _counter :: Int
   , _eqset   :: Set TypeEq
-  , _tyctx   :: TyCtx
+  , _tyctx   :: TyCtx -- TODO remove
 }
 
 makeLenses ''Judge

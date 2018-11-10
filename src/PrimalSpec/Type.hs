@@ -5,7 +5,7 @@ module PrimalSpec.Type
   ( module PrimalSpec.Type
   ) where
 
-import Data.List(groupBy, lookup)
+import Data.List(groupBy, lookup, intersperse)
 --import Data.Monoid((++))
 import Control.Lens
 import Control.Monad.Except(throwError, MonadError)
@@ -173,28 +173,28 @@ groupCtx ctx = [squash sameKeyValues | sameKeyValues <- groupBy (\x y -> x^._1 =
     where squash ctxs = ((head ctxs)^._1, ctxs ^.. traverse . _2)
 
 updateCtx :: (String, a) -> Ctx a -> Ctx a
-updateCtx _ [] = []
+updateCtx (k, _) [] = error $ "no key:" ++ k
 updateCtx c@(k, _) (c'@(k',_):cs) = if k == k' then c:cs else c':(updateCtx c cs)
 
 type VCtx  = Ctx Value
 
 data VProc
-    = VPrefix    EEvent Expr (Maybe Expr)
-    | VSequence  (VCtx, VProc) (VCtx, Expr)
-    | VInterrupt (VCtx, VProc) (VCtx, VProc)
-    | VEChoise   (VCtx, VProc) (VCtx, VProc)
+    = VPrefix    VCtx EEvent Expr (Maybe Expr)
+    | VSequence  VProc (VCtx, Expr)
+    | VInterrupt VProc VProc
+    | VEChoise   VProc VProc
     | VSkip
     | VStop
     -- | VChaos
 
 instance Show VProc where
     show = go [] where
-        go bs (VPrefix ev _ _)               = indent bs ++ show ev ++ " -> ..." ++ endl
-        go bs (VSequence  (_, p1) (_, _)) = indent bs ++ ";"  ++ endl ++ go (bs++[True]) p1 ++ (indent (bs++[False]) ++ "...")
-        go bs (VInterrupt (_, p1) (_, p2)) = indent bs ++ "/\\" ++ endl  ++ go (bs++[True]) p1 ++ go (bs++[False]) p2
-        go bs (VEChoise   (_,p1) (_,p2))   = indent bs ++ "[]"  ++ endl ++ go (bs++[True]) p1 ++ go (bs++[False]) p2
-        go bs VSkip                      = indent bs ++ "SKIP" ++ endl
-        go bs VStop                      = indent bs ++ "STOP" ++ endl
+        go bs (VPrefix _ ev _ _)      = indent bs ++ show ev ++ " -> ..." ++ endl
+        go bs (VSequence  p1 (_, _))  = indent bs ++ ";"  ++ endl ++ go (bs++[True]) p1 ++ (indent (bs++[False]) ++ "...")
+        go bs (VInterrupt p1 p2)      = indent bs ++ "/\\" ++ endl  ++ go (bs++[True]) p1 ++ go (bs++[False]) p2
+        go bs (VEChoise   p1 p2)      = indent bs ++ "[]"  ++ endl ++ go (bs++[True]) p1 ++ go (bs++[False]) p2
+        go bs VSkip                   = indent bs ++ "SKIP" ++ endl
+        go bs VStop                   = indent bs ++ "STOP" ++ endl
         indent [] = "--* "
         indent [True] = "  |----* "
         indent [False] = "  `----* "
@@ -207,11 +207,25 @@ data Value
     | VClosure [Pattern] [(String, Value)] Expr
     | VFun [([Pattern], Expr)]
     | VThunk Expr
+    | VThunkProc Expr
     | VConstr String [Value] -- TODO VRecord
     | VAccessor Int
     | VProc VProc
     | VProcFun [([Pattern], Expr)]
-    deriving (Show)
+
+
+instance Show Value where
+    show (VBool b) = if b then "true" else "false"
+    show (VInt n) = show n
+    show (VClosure _ _ _) = "closure"
+    show (VFun _) = "fun"
+    show (VThunk _) = "thunk"
+    show (VThunkProc _) = "thunkproc"
+    show (VConstr c vs) = "(" ++ c ++ concat ((\v -> "." ++ show v) <$> vs) ++ ")"
+    show (VAccessor _) = "accesor"
+    show (VProc vp) = show vp
+    show (VProcFun _) = "proc-fun"
+
 
 makePrisms ''Value
 
@@ -223,6 +237,9 @@ eqValue v1 v2 = error $ "invalid argument!!\n" ++ show v1 ++ "\n" ++ show v2
 
 nqValue :: (HasCallStack) => Value -> Value -> Bool
 nqValue x y = not $ eqValue x y
+
+showCtx :: (Show a) => Ctx a -> String
+showCtx ctx = concat $ intersperse "\n" [ k ++ " : " ++ show v| (k,v) <- ctx]
 
 data VEvent = VEvent String [Value] deriving (Show)
 

@@ -57,7 +57,7 @@ procContext stmts = do
     assertNoMultiDefinition pctx
     forM pctx $ \(nm, ds) -> do
         let v = case ds of
-                    [(_, [], e) ] -> VThunk e
+                    [(_, [], e) ] -> VThunkProc e
                     [(_, pts, e)] -> VProcFun [(pts, e)]
                     _             -> VProcFun [(pts, e) | (_, pts, e) <- ds]
         return (nm, v)

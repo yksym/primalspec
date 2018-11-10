@@ -21,7 +21,7 @@ prsp sample/vm.csp
 syntax extension
 -----------------
 
-* record
+### record
 
 ```
 datatype Hoge {
@@ -37,23 +37,30 @@ get(h) = h ^. xxx
 set3 :: (Hoge) -> Hoge
 set3(h) = h { xxx = 3 }
 ```
+### global state
 
-* global state
 ```
 datatype Global {
     tmp :: Int
 }
 
-P = ev1 @( Global.3 ) -> global ^. tmp == 3 & ev2 -> SKIP
+P = ev1 @( Global.3 ) -- update
+    -> global ^. tmp == 3 & ev2 -> SKIP -- refer
 
 assert P [T= ev1 -> ev2 -> SKIP
 ```
 
 NOTE: Currently, only '''->''' and ''';''' can be used in a RHS of '''[T='''.
+NOTE: This semantics is very confusing, so use only in process expression.
 
 
 TODO
 ---
+
+* expr inspector / traceShow
+* readable vctx print
+* readable datatype print
+* tutorial
 
 * make code elegant
 * make event Expr (now event is not used as an argument)

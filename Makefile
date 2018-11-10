@@ -3,7 +3,7 @@ all:
 	stack build --pedantic
 
 run:
-	stack exec prsp sample/vm.csp
+	stack exec prsp sample/vm.csp 1
 
 test:
 	stack exec prsp sample/test.csp
